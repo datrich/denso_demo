@@ -24,7 +24,7 @@ from rclpy.time import Time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "panel"))
 import ur5e_kinematics as kin  # noqa: E402
-from ur5e_control import MotionController, RosBridge, load_gripper_config  # noqa: E402
+from ur5e_control import MotionController, RosBridge, load_gripper_config, run_motion, sim_sleep  # noqa: E402
 
 OBJECTS_FILE = Path(__file__).resolve().parents[1] / "config" / "objects.json"
 # do cao kep tinh tu profile be rong cua mesh (tools/bop_to_usd.py)
@@ -94,20 +94,15 @@ def main():
     ctrl.tcp_z = grip["tcp_offset_m"][2]
     fj = grip["finger_joint"]
 
-    def run(timeout=30.0):
-        dt = 1.0 / 50.0
-        end = time.monotonic() + timeout
-        while ctrl.mode != "idle" and time.monotonic() < end:
-            ctrl.tick(dt)
-            time.sleep(dt)
-        time.sleep(0.4)
-        err = ctrl.error
-        ctrl.error = ""
+    # Moi khoang cho deu tinh theo THOI GIAN SIM -> dung ca khi sim cham hon thoi gian thuc (server)
+    def run(timeout=90.0):
+        err = run_motion(ctrl, ros, timeout)
+        sim_sleep(ros, 0.4)
         return err
 
     def gripper(rad, wait=1.5):
         ros.send_command([rad], names=[fj])
-        time.sleep(wait)
+        sim_sleep(ros, wait)
         return ros.joint_value(fj)
 
     def obj_pose(frame):
@@ -191,7 +186,7 @@ def main():
         gripper(grip["open_rad"], wait=1.0)
         ctrl.move_pose_linear(pose([px, py, transit_z], r_place), ros.joint_state()[0])
         run()
-        time.sleep(0.5)
+        sim_sleep(ros, 0.5)
 
         q, rq = obj_pose(o["frame"])
         xy_err = np.linalg.norm(q[:2] - [px, py]) * 1000

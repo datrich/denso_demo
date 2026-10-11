@@ -29,6 +29,44 @@ LINEAR_SETTLE_S = 1.5  # thoi gian toi da de MoveL hoi tu o cuoi duong
 GRIPPER_FILE = Path(__file__).resolve().parents[1] / "config" / "gripper.json"
 
 
+def sim_sleep(ros, seconds, wall_timeout=None):
+    """Ngu `seconds` giay THOI GIAN SIM (/clock); khong co /clock thi ngu theo dong ho that."""
+    t0 = ros.sim_time()
+    if t0 is None:
+        time.sleep(seconds)
+        return
+    end = time.monotonic() + (wall_timeout if wall_timeout is not None else seconds * 20 + 5)
+    while time.monotonic() < end:
+        t = ros.sim_time()
+        if t is not None and t - t0 >= seconds:
+            return
+        time.sleep(0.01)
+
+
+def run_motion(ctrl, ros, timeout=90.0, settle_deg=0.3):
+    """Chay MotionController toi khi xong, buoc theo thoi gian sim (dung ca khi sim cham hon thoi gian thuc),
+    roi doi khop thuc te bam toi lenh cuoi. Tra ve thong bao loi (rong neu on)."""
+    end = time.monotonic() + timeout
+    last = ros.sim_time()
+    while ctrl.mode != "idle" and time.monotonic() < end:
+        time.sleep(0.01)
+        now = ros.sim_time()
+        if now is None or last is None:
+            dt, last = 0.02, now
+        else:
+            dt, last = now - last, now
+            if dt <= 0:
+                continue  # sim chua chay them buoc nao
+        ctrl.tick(min(dt, 0.1))
+    while time.monotonic() < end:  # doi robot thuc su toi dich
+        q = ros.joint_state()[0]
+        if q is None or ctrl.cmd_q is None or np.max(np.abs(q - ctrl.cmd_q)) < np.radians(settle_deg):
+            break
+        time.sleep(0.02)
+    err, ctrl.error = ctrl.error, ""
+    return err
+
+
 def load_gripper_config():
     try:
         cfg = json.loads(GRIPPER_FILE.read_text(encoding="utf-8"))
