@@ -69,7 +69,7 @@ bash ur5e_ros/linux/record_demo.sh                   # chạy pick & place + qua
 - `--no-window`: không mở cửa sổ, không đụng tới desktop của người đang dùng máy.
 - GPU được chọn bằng `--/renderer/activeGpu` và `--/physics/cudaDevice`. Đừng dùng `CUDA_VISIBLE_DEVICES`: renderer RTX sẽ lỗi "No device could be created".
 - Cấu hình, cache và log của Kit nằm riêng trong `.isaac_portable/`, nên không lẫn với Isaac Sim của người khác. Chạy với `nice 10`.
-- Camera toàn cảnh 1280×720 (`UR5E_DEMO_CAM=1`) phát lên `/demo_cam/rgb`. `record_camera.py` đặt khung hình theo thời gian sim, nên video phát đúng tốc độ kể cả khi sim chậm. Ở góc trên bên trái, video ghép thêm 2 khung của camera D435 ở cổ tay: ảnh RGB và ảnh độ sâu tô màu jet trong dải 0.1–3 m. Dùng `--no-inset` để tắt phần ghép này.
+- Camera toàn cảnh 1280×720 (`UR5E_DEMO_CAM=1`) phát lên `/demo_cam/rgb`. `record_camera.py` đặt khung hình theo thời gian sim, nên video phát đúng tốc độ kể cả khi sim chậm. Ở góc trên bên trái, video ghép thêm 2 khung của camera D435 ở cổ tay, xếp thành cột dọc: ảnh RGB ở trên, ảnh độ sâu tô màu jet trong dải 0.1–3 m ở dưới. Dùng `--inset-horizontal` để xếp ngang, `--no-inset` để tắt.
 - Demo và các khoảng chờ chạy theo thời gian sim (`/clock`). Trên server, sim chỉ đạt RTF khoảng 0.46 (vật lý chạy CPU) mà demo vẫn đúng.
 
 ## Kết quả đã kiểm chứng

@@ -3,8 +3,8 @@
     python tools/record_camera.py --out recordings/demo.mp4                 # toi khi Ctrl+C / SIGTERM
     python tools/record_camera.py --out a.mp4 --duration 20 --snapshot-every 5
 
-Mac dinh ghep 2 khung camera D435 co tay (RGB + do sau to mau jet 0.1-3 m) vao goc tren ben trai
-(--no-inset de tat).
+Mac dinh ghep 2 khung camera D435 co tay (RGB tren, do sau to mau jet 0.1-3 m duoi) thanh cot doc
+o goc tren ben trai (--inset-horizontal: xep ngang, --no-inset: tat).
 
 Can: imageio-ffmpeg (pip) de ghi MP4; anh chup PNG dung imageio-ffmpeg luon (1 frame) hoac numpy thuan.
 """
@@ -83,19 +83,23 @@ def draw_text(img: np.ndarray, x: int, y: int, text: str, scale: int = 2, color=
         sub[g[: sub.shape[0], : sub.shape[1]]] = color
 
 
-def compose_insets(frame: np.ndarray, panels, width: int = 320, margin: int = 12, border: int = 2) -> np.ndarray:
-    """Dan cac panel (anh RGB hoac None, nhan) canh nhau o goc tren ben trai cua frame."""
+def compose_insets(frame: np.ndarray, panels, width: int = 320, margin: int = 12, border: int = 2,
+                   vertical: bool = True) -> np.ndarray:
+    """Dan cac panel (anh RGB hoac None, nhan) o goc tren ben trai: cot doc (mac dinh) hoac hang ngang."""
     out = frame.copy()
-    x = margin
+    x = y = margin
     for img, label in panels:
         h = width * 3 // 4 if img is None else round(width * img.shape[0] / img.shape[1])
-        if x + width + border > out.shape[1] or margin + h + border > out.shape[0]:
+        if x + width + border > out.shape[1] or y + h + border > out.shape[0]:
             break
-        out[margin - border: margin + h + border, x - border: x + width + border] = 255  # vien trang
-        out[margin: margin + h, x: x + width] = 0 if img is None else downscale(img, width, h)
-        out[margin: margin + 22, x: x + width] //= 3  # nen toi cho nhan
-        draw_text(out, x + 6, margin + 4, label if img is not None else label + " -")
-        x += width + margin
+        out[y - border: y + h + border, x - border: x + width + border] = 255  # vien trang
+        out[y: y + h, x: x + width] = 0 if img is None else downscale(img, width, h)
+        out[y: y + 22, x: x + width] //= 3  # nen toi cho nhan
+        draw_text(out, x + 6, y + 4, label if img is not None else label + " -")
+        if vertical:
+            y += h + margin
+        else:
+            x += width + margin
     return out
 
 
@@ -141,7 +145,7 @@ class Recorder(Node):
         rgb = to_rgb(msg)
         if not self.args.no_inset:
             rgb = compose_insets(rgb, [(self.inset_rgb, "D435 RGB"), (self.inset_depth, "D435 DEPTH 0.1-3M")],
-                                 width=self.args.inset_width)
+                                 width=self.args.inset_width, vertical=not self.args.inset_horizontal)
         now = time.monotonic()
         stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9  # thoi gian sim
         with self.lock:
@@ -191,6 +195,7 @@ def main():
     ap.add_argument("--inset-rgb-topic", default="/camera/color/image_raw")
     ap.add_argument("--inset-depth-topic", default="/camera/depth/image_rect_raw")
     ap.add_argument("--inset-width", type=int, default=320, help="chieu rong moi khung D435 ghep vao (px)")
+    ap.add_argument("--inset-horizontal", action="store_true", help="xep 2 khung D435 thanh hang ngang (mac dinh cot doc)")
     ap.add_argument("--no-inset", action="store_true", help="khong ghep khung D435")
     args, _ = ap.parse_known_args()
 
