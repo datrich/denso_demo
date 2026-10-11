@@ -346,7 +346,7 @@ def _add_hope_objects(stage, robot_pos, top, rng):
         inside = rng.GetMin()[0] + 0.05 < x < rng.GetMax()[0] - 0.05 and rng.GetMin()[1] + 0.05 < y < rng.GetMax()[1] - 0.05
         ok = (prim.HasAPI(UsdPhysics.RigidBodyAPI) and mesh and mesh.HasAPI(UsdPhysics.CollisionAPI)
               and approx in ("convexHull", "convexDecomposition") and mass and inside)
-        checks.append((ok, f"{o['name']} (HOPE obj_{o['obj_id']:06d}) {[round(v * 1000) for v in o['size_m']]} mm, "
+        checks.append((ok, f"{o['name']} ({OBJECTS} obj_{o['obj_id']:06d}) {[round(v * 1000) for v in o['size_m']]} mm, "
                            f"{mass} kg, {approx}, yaw {yaw:+.0f} deg, tren ban={inside}"))
         paths.append(path)
         cfg.append({"name": o["name"], "frame": o["name"], "obj_id": o["obj_id"], "size_m": o["size_m"],

@@ -81,6 +81,24 @@ bash ur5e_ros/linux/record_demo.sh                   # chạy pick & place + qua
 | Gắp khối lập phương 4 cm | 8/8. Nâng 150.1/150 mm, trượt 0.0 mm |
 | Pick & place 5 vật HOPE (Windows, RTX 5090) | **4/5**. Butter 0.5 mm, Pudding 1.2 mm, GreenBeans 0.2 mm, Raisins 17.5 mm |
 | Pick & place 5 vật HOPE (server Linux headless, chờ theo thời gian sim) | **5/5**. Lệch 1 / 1 / 1 / 4 / 14 mm, nghiêng ≤ 1° |
+| Pick & place 5 chi tiết cơ khí ITODD (server Linux headless) | **5/5**. Lệch 0.6–2.5 mm, nghiêng 0° |
+
+### Bộ chi tiết cơ khí (BOP ITODD)
+
+`UR5E_OBJECTS=itodd` thay đồ gia dụng bằng 5 chi tiết công nghiệp của [MVTec ITODD](https://bop.felk.cvut.cz/datasets/). Tải bằng `tools/bop_to_usd.py --dataset itodd --fetch` (Windows: `pixi run fetch-itodd`):
+
+| Chi tiết | ITODD | Đặt trên bàn (cao × hẹp × dài) | Kẹp ở |
+|---|---|---|---|
+| HexBolt (bu lông lục giác) | 23 | 56 × 17 × 19 mm | thân ren 8 mm |
+| SteppedPin (chốt bậc) | 24 | 60 × 30 × 30 mm | trục Ø20 trên vai |
+| PipeTee (khớp nối chữ T) | 26 | 41 × 25 × 63 mm | thân ống Ø24 |
+| ClampBlock (khối kẹp) | 9 | 38 × 60 × 78 mm | cạnh 60 mm |
+| SlottedClamp (kẹp có rãnh) | 10 | 50 × 15 × 20 mm | cạnh 15 mm |
+
+Mesh CAD công nghiệp không đặt sẵn ở tư thế đứng, nên bộ chuyển đổi thử 6 hướng úp xuống bàn. Hướng được chọn phải đứng vững (tâm khối nằm sâu trong vùng tựa) và kẹp được (cạnh hẹp 10–70 mm, cao ≥ 30 mm). Ngoài ra bộ chuyển đổi:
+- Tính khối lượng từ thể tích mesh với mật độ nhôm.
+- Dùng va chạm `convexDecomposition` cho vật lõm.
+- Đo độ cao kẹp bằng mặt cắt chính xác qua các tam giác, nên dùng được cả với mesh CAD ít đỉnh.
 | Tốc độ mô phỏng | Thời gian thực (60 Hz), camera 30 Hz |
 
 **Hạn chế đã biết**: *Yogurt* là cốc thuôn (54 → 66 mm), nên hai má kẹp phẳng song song chỉ chạm cốc ở 2 điểm. Cốc xoay quanh trục nối 2 điểm đó và bị lật dù đã thêm ma sát xoắn và kẹp ở vành. Muốn gắp được loại vật này cần biến thể `compliant` của 2F-85 hoặc tay gắp hút.
