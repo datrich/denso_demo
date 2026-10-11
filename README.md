@@ -55,6 +55,23 @@ Scene tự kiểm tra cấu hình và in `[ur5e_scene] CONFIG OK 20/20`. Sau đ�
 | `pixi run pick-place` | Gắp 5 vật HOPE, xếp ngay ngắn vào hàng gần robot |
 | `pixi run grasp-test` | Gắp – nâng – đặt khối lập phương (chạy sim với `$env:UR5E_OBJECTS="cube"`) |
 
+## Chạy headless trên server Linux (quay video, không cần màn hình)
+
+Đã thử trên Ubuntu 24.04, ROS 2 Jazzy cài bằng apt, Isaac Sim 6.1.0, 2× RTX 4090. Không cần pixi: script dùng ROS của hệ thống (`~/ros2_ws/env.sh` nếu có) và một venv nhỏ.
+
+```bash
+bash ur5e_ros/linux/setup.sh                         # venv + usd-core + imageio-ffmpeg, tải 5 vật HOPE
+GPU=1 bash ur5e_ros/linux/sim_headless.sh &          # Isaac Sim headless trên GPU 1
+bash ur5e_ros/linux/run.sh check_sim --move          # kiểm tra
+bash ur5e_ros/linux/record_demo.sh                   # chạy pick & place + quay MP4 -> recordings/<thời gian>/
+```
+
+- `--no-window`: không mở cửa sổ, không đụng tới desktop của người đang dùng máy.
+- GPU được chọn bằng `--/renderer/activeGpu` và `--/physics/cudaDevice`. Đừng dùng `CUDA_VISIBLE_DEVICES`: renderer RTX sẽ lỗi "No device could be created".
+- Cấu hình, cache và log của Kit nằm riêng trong `.isaac_portable/`, nên không lẫn với Isaac Sim của người khác. Chạy với `nice 10`.
+- Camera toàn cảnh 1280×720 (`UR5E_DEMO_CAM=1`) phát lên `/demo_cam/rgb`. `record_camera.py` đặt khung hình theo thời gian sim, nên video phát đúng tốc độ kể cả khi sim chậm.
+- Demo và các khoảng chờ chạy theo thời gian sim (`/clock`). Trên server, sim chỉ đạt RTF khoảng 0.46 (vật lý chạy CPU) mà demo vẫn đúng.
+
 ## Kết quả đã kiểm chứng
 
 | Bài kiểm tra | Kết quả |
@@ -62,7 +79,8 @@ Scene tự kiểm tra cấu hình và in `[ur5e_scene] CONFIG OK 20/20`. Sau đ�
 | Cấu hình scene (gripper, vật lý, vật thể) | 20/20 |
 | FK của panel so với `/tf` của Isaac Sim | lệch 0.04 mm / 0.004° |
 | Gắp khối lập phương 4 cm | 8/8. Nâng 150.1/150 mm, trượt 0.0 mm |
-| Pick & place 5 vật HOPE | **4/5**. Butter 0.5 mm, Pudding 1.2 mm, GreenBeans 0.2 mm, Raisins 17.5 mm |
+| Pick & place 5 vật HOPE (Windows, RTX 5090) | **4/5**. Butter 0.5 mm, Pudding 1.2 mm, GreenBeans 0.2 mm, Raisins 17.5 mm |
+| Pick & place 5 vật HOPE (server Linux headless, chờ theo thời gian sim) | **5/5**. Lệch 1 / 1 / 1 / 4 / 14 mm, nghiêng ≤ 1° |
 | Tốc độ mô phỏng | Thời gian thực (60 Hz), camera 30 Hz |
 
 **Hạn chế đã biết**: *Yogurt* là cốc thuôn (54 → 66 mm), nên hai má kẹp phẳng song song chỉ chạm cốc ở 2 điểm. Cốc xoay quanh trục nối 2 điểm đó và bị lật dù đã thêm ma sát xoắn và kẹp ở vành. Muốn gắp được loại vật này cần biến thể `compliant` của 2F-85 hoặc tay gắp hút.
