@@ -12,9 +12,10 @@ fi
 python -m pip install -q --upgrade pip
 python -m pip install -q usd-core imageio-ffmpeg
 python - <<'EOF'
-import imageio_ffmpeg, pxr, rclpy, numpy
+import imageio_ffmpeg, rclpy, numpy
+from pxr import Usd
 print("ffmpeg:", imageio_ffmpeg.get_ffmpeg_exe())
-print("usd-core", pxr.Usd.GetVersion(), "| numpy", numpy.__version__, "| rclpy OK")
+print("usd-core", Usd.GetVersion(), "| numpy", numpy.__version__, "| rclpy OK")
 EOF
 cd "$REPO_ROS"
 python tools/bop_to_usd.py --fetch
