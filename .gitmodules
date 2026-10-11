@@ -1,0 +1,6 @@
+[submodule "ur5eworkspace-env"]
+	path = ur5eworkspace-env
+	url = https://github.com/Veus09/ur5eworkspace-env
+[submodule "robotiq_isaacsim_assets"]
+	path = robotiq_isaacsim_assets
+	url = https://github.com/robotiq/isaacsim_assets.git

@@ -1,0 +1,15 @@
+# Moi truong pixi / Python
+.pixi/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# File sinh ra khi chay (scene / panel ghi ra)
+ur5e_ros/config/*.json
+
+# Du lieu ben thu ba: tai bang `pixi run fetch-hope`, khong phan phoi lai trong repo
+datasets/
+
+# Ghi chu nghien cuu ca nhan
+papers_analysis.md
+papers_table.md

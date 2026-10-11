@@ -1,0 +1,59 @@
+[workspace]
+name = "ur5e_ros"
+description = "UR5e trong Isaac Sim 6.0.1 + ROS 2 Jazzy (pixi/RoboStack) + panel dieu khien"
+channels = ["https://prefix.dev/robostack-jazzy", "https://prefix.dev/conda-forge"]
+platforms = ["win-64"]
+requires-pixi = ">=0.68.0"
+
+[dependencies]
+ros-jazzy-ros-base = "*"
+ros-jazzy-ros2cli = "*"
+ros-jazzy-rmw-zenoh-cpp = "*"
+ros-jazzy-rmw-fastrtps-cpp = "*"
+ros-jazzy-sensor-msgs = "*"
+ros-jazzy-std-msgs = "*"
+ros-jazzy-geometry-msgs = "*"
+ros-jazzy-rosgraph-msgs = "*"
+numpy = "*"
+pyside6 = "*"
+pytest = "*"
+pywin32 = "*"
+
+[activation.env]
+# Giong workspace chinh thuc IsaacSim-ros_workspaces/jazzy_ws: Zenoh lam RMW
+RMW_IMPLEMENTATION = "rmw_zenoh_cpp"
+ROS_DOMAIN_ID = "0"
+ROS_DISTRO = "jazzy"
+KMP_DUPLICATE_LIB_OK = "TRUE"
+isaac_sim_package_path = "C:\\isaacsim"
+
+[tasks]
+# Terminal 1: Zenoh router (phai chay truoc moi node ROS 2, ke ca Isaac Sim)
+zenoh = { cmd = "ros2 run rmw_zenoh_cpp rmw_zenohd", description = "Zenoh router" }
+# Terminal 2: Isaac Sim + scene UR5e + Action Graph ROS 2
+# isaac-sim.bat chi dung ROS noi bo khi ROS_DISTRO chua dat -> o day dung ROS Jazzy + Zenoh cua pixi
+sim = { cmd = "$isaac_sim_package_path\\isaac-sim.bat --/isaac/startup/ros_bridge_extension=isaacsim.ros2.bridge --exec $PIXI_PROJECT_ROOT\\isaac\\ur5e_scene.py", description = "Mo Isaac Sim voi scene UR5e va cau ROS 2" }
+# Nhu sim nhung dung D3D12 thay Vulkan (workaround loi Vulkan tren GPU Blackwell/Windows)
+sim-d3d12 = { cmd = "$isaac_sim_package_path\\isaac-sim.bat --/app/vulkan=false --/isaac/startup/ros_bridge_extension=isaacsim.ros2.bridge --exec $PIXI_PROJECT_ROOT\\isaac\\ur5e_scene.py", description = "Isaac Sim (D3D12) + scene UR5e + ROS 2" }
+# Terminal 3: panel dieu khien
+panel = { cmd = "python panel\\ur5e_panel.py", description = "Panel dieu khien UR5e qua ROS 2" }
+# plugin pytest cua launch_testing (ROS) khong tuong thich pytest 9 -> tat di
+test = { cmd = "python -m pytest -q -p no:launch_testing -p no:launch_ros tests", description = "Kiem tra FK/IK" }
+# --no-daemon: ros2 daemon hay bi treo tren Windows
+topics = "ros2 topic list --no-daemon"
+# Thu panel khi chua mo Isaac Sim (van can pixi run zenoh)
+fake-sim = { cmd = "python tools\\fake_sim.py", description = "Sim gia lap /joint_states + camera" }
+# Demo IK: Ready -> hinh vuong 15 cm (MoveL) -> ha/nang 10 cm
+ik-demo = { cmd = "python tools\\ik_demo.py", description = "Demo IK qua MotionController cua panel" }
+# Thu gap TestCube bang Robotiq 2F-85 (can scene co gripper)
+grasp-test = { cmd = "python tools\\grasp_test.py", description = "Gap - nang - dat TestCube bang 2F-85" }
+# Demo pick & place 5 vat BOP HOPE (can scene mac dinh UR5E_OBJECTS=hope)
+pick-place = { cmd = "python tools\\pick_place_demo.py", description = "Gap - dat 5 vat HOPE thanh hang ngay ngan" }
+# Chuyen model BOP HOPE (PLY, mm) -> USD co vat ly cho Isaac Sim
+bop-to-usd = { cmd = "python tools\\bop_to_usd.py", description = "PLY BOP -> USD (datasets/bop_hope/usd)" }
+fetch-hope = { cmd = "python tools\\bop_to_usd.py --fetch", description = "Tai 5 vat HOPE tu Hugging Face + chuyen USD" }
+# Kiem tra ket noi sim <-> ROS 2 (them "-- --move" de thu chuyen dong)
+check-sim = { cmd = "python tools\\check_sim.py", description = "Kiem tra joint_states, clock, camera, tf" }
+
+[pypi-dependencies]
+usd-core = ">=26.8, <27"
