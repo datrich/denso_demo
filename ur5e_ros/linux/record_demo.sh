@@ -3,7 +3,7 @@
 #   bash ur5e_ros/linux/record_demo.sh                         # -> recordings/<thoi gian>/
 #   RECORD_DIR=~/denso_demo_videos bash ur5e_ros/linux/record_demo.sh   # thu muc rieng (de tai qua AnyDesk)
 #   bash ur5e_ros/linux/record_demo.sh grasp_test              # quay tool khac
-# Ket qua: <tool>.mp4 (1280x720), <tool>_small.mp4 (960p, nen manh de tai qua mang cham), anh PNG moi 5 s, log
+# Ket qua: <tool>.mp4 (1280x720, goc tren trai ghep RGB + do sau cua D435 co tay),<tool>_small.mp4 (960p, nen manh de tai qua mang cham), anh PNG moi 5 s, log
 set -eo pipefail  # khong dung -u: setup.bash cua ROS tham chieu bien chua dat
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 tool="${1:-pick_place_demo}"

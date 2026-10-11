@@ -3,6 +3,9 @@
     python tools/record_camera.py --out recordings/demo.mp4                 # toi khi Ctrl+C / SIGTERM
     python tools/record_camera.py --out a.mp4 --duration 20 --snapshot-every 5
 
+Mac dinh ghep 2 khung camera D435 co tay (RGB + do sau to mau jet 0.1-3 m) vao goc tren ben trai
+(--no-inset de tat).
+
 Can: imageio-ffmpeg (pip) de ghi MP4; anh chup PNG dung imageio-ffmpeg luon (1 frame) hoac numpy thuan.
 """
 
@@ -27,6 +30,73 @@ def to_rgb(msg: Image) -> np.ndarray:
     if msg.encoding.lower().startswith("bgr"):
         arr = arr[:, :, ::-1]
     return np.ascontiguousarray(arr)
+
+
+def depth_to_rgb(msg: Image, rng=(0.1, 3.0)) -> np.ndarray:
+    """Anh do sau (32FC1 m / 16UC1 mm) -> RGB bang mau jet; vung khong hop le (nan, 0, ngoai dai) mau den."""
+    enc = msg.encoding.upper()
+    dt, scale = {"32FC1": (np.float32, 1.0), "16UC1": (np.uint16, 1e-3)}[enc]
+    d = np.frombuffer(bytes(msg.data), dt).reshape(msg.height, -1)[:, : msg.width].astype(np.float32) * scale
+    lo, hi = rng
+    valid = np.isfinite(d) & (d >= lo)
+    d = np.nan_to_num(d, nan=hi, posinf=hi, neginf=lo)
+    t = np.clip((d - lo) / (hi - lo), 0.0, 1.0)
+    rgb = np.stack([np.clip(1.5 - np.abs(4 * t - k), 0, 1) for k in (3, 2, 1)], axis=-1)
+    rgb = (rgb * 255).astype(np.uint8)
+    rgb[~valid] = 0
+    return rgb
+
+
+def downscale(img: np.ndarray, w: int, h: int) -> np.ndarray:
+    """Thu nho anh: trung binh khoi neu chia het, khong thi lay mau gan nhat."""
+    H, W = img.shape[:2]
+    if H % h == 0 and W % w == 0:
+        fy, fx = H // h, W // w
+        return img.reshape(h, fy, w, fx, -1).mean(axis=(1, 3)).astype(np.uint8)
+    ys = (np.arange(h) * H / h).astype(int)
+    xs = (np.arange(w) * W / w).astype(int)
+    return img[ys][:, xs]
+
+
+# Font bitmap 5x7 cho nhan inset (chi cac ky tu can dung, ky tu khac -> khoang trang)
+_FONT = {
+    "0": "01110 10001 10011 10101 11001 10001 01110", "1": "00100 01100 00100 00100 00100 00100 01110",
+    "3": "11110 00001 00001 01110 00001 00001 11110", "4": "00010 00110 01010 10010 11111 00010 00010",
+    "5": "11111 10000 11110 00001 00001 10001 01110", "B": "11110 10001 10001 11110 10001 10001 11110",
+    "D": "11110 10001 10001 10001 10001 10001 11110", "E": "11111 10000 10000 11110 10000 10000 11111",
+    "G": "01110 10001 10000 10111 10001 10001 01111", "H": "10001 10001 10001 11111 10001 10001 10001",
+    "M": "10001 11011 10101 10101 10001 10001 10001", "P": "11110 10001 10001 11110 10000 10000 10000",
+    "R": "11110 10001 10001 11110 10100 10010 10001", "T": "11111 00100 00100 00100 00100 00100 00100",
+    ".": "00000 00000 00000 00000 00000 01100 01100", "-": "00000 00000 00000 11111 00000 00000 00000",
+}
+
+
+def draw_text(img: np.ndarray, x: int, y: int, text: str, scale: int = 2, color=(255, 255, 255)):
+    for i, ch in enumerate(text.upper()):
+        rows = _FONT.get(ch)
+        if rows is None:
+            continue
+        g = np.array([[c == "1" for c in r] for r in rows.split()], bool)
+        g = np.kron(g, np.ones((scale, scale), bool))
+        x0 = x + i * 6 * scale
+        sub = img[y: y + g.shape[0], x0: x0 + g.shape[1]]
+        sub[g[: sub.shape[0], : sub.shape[1]]] = color
+
+
+def compose_insets(frame: np.ndarray, panels, width: int = 320, margin: int = 12, border: int = 2) -> np.ndarray:
+    """Dan cac panel (anh RGB hoac None, nhan) canh nhau o goc tren ben trai cua frame."""
+    out = frame.copy()
+    x = margin
+    for img, label in panels:
+        h = width * 3 // 4 if img is None else round(width * img.shape[0] / img.shape[1])
+        if x + width + border > out.shape[1] or margin + h + border > out.shape[0]:
+            break
+        out[margin - border: margin + h + border, x - border: x + width + border] = 255  # vien trang
+        out[margin: margin + h, x: x + width] = 0 if img is None else downscale(img, width, h)
+        out[margin: margin + 22, x: x + width] //= 3  # nen toi cho nhan
+        draw_text(out, x + 6, margin + 4, label if img is not None else label + " -")
+        x += width + margin
+    return out
 
 
 def save_png(path: Path, rgb: np.ndarray):
@@ -55,9 +125,23 @@ class Recorder(Node):
         self.last_snap = -1e9
         self.lock = threading.Lock()
         self.create_subscription(Image, args.topic, self.on_image, qos_profile_sensor_data)
+        # Anh moi nhat cua camera D435 co tay de ghep vao goc tren ben trai
+        self.inset_rgb = self.inset_depth = None
+        if not args.no_inset:
+            self.create_subscription(Image, args.inset_rgb_topic, self.on_inset_rgb, qos_profile_sensor_data)
+            self.create_subscription(Image, args.inset_depth_topic, self.on_inset_depth, qos_profile_sensor_data)
+
+    def on_inset_rgb(self, msg):
+        self.inset_rgb = to_rgb(msg)
+
+    def on_inset_depth(self, msg):
+        self.inset_depth = depth_to_rgb(msg)
 
     def on_image(self, msg):
         rgb = to_rgb(msg)
+        if not self.args.no_inset:
+            rgb = compose_insets(rgb, [(self.inset_rgb, "D435 RGB"), (self.inset_depth, "D435 DEPTH 0.1-3M")],
+                                 width=self.args.inset_width)
         now = time.monotonic()
         stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9  # thoi gian sim
         with self.lock:
@@ -104,6 +188,10 @@ def main():
     ap.add_argument("--fps", type=float, default=30.0)
     ap.add_argument("--duration", type=float, default=0.0, help="giay; 0 = toi khi bi dung")
     ap.add_argument("--snapshot-every", type=float, default=0.0, help="chup PNG moi N giay (0 = tat)")
+    ap.add_argument("--inset-rgb-topic", default="/camera/color/image_raw")
+    ap.add_argument("--inset-depth-topic", default="/camera/depth/image_rect_raw")
+    ap.add_argument("--inset-width", type=int, default=320, help="chieu rong moi khung D435 ghep vao (px)")
+    ap.add_argument("--no-inset", action="store_true", help="khong ghep khung D435")
     args, _ = ap.parse_known_args()
 
     rclpy.init()
