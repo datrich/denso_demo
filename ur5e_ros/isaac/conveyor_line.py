@@ -81,10 +81,17 @@ def build(stage: Usd.Stage, assets_root: str, robot_pos, table_top: float, table
         x_end = x_start - belt_len
         belt_w = bw.GetMax()[1] - bw.GetMin()[1]
 
-        # mat bang: rigid body kinematic (asset da co) - dam bao lai, ma sat cao de vat khong truot
+        # mat bang: rigid body kinematic. Asset 6.0 da co san (collider o /Belt); asset 6.1 chi co collider o
+        # mesh con -> them RigidBodyAPI, va mesh dung convexHull nhu create_conveyor_belt() cua NVIDIA
         UsdPhysics.RigidBodyAPI.Apply(belt).CreateKinematicEnabledAttr(True)
+        colliders = [p for p in Usd.PrimRange(belt) if p.HasAPI(UsdPhysics.CollisionAPI)]
+        for p in colliders:
+            if p.IsA(UsdGeom.Mesh):
+                approx = UsdPhysics.MeshCollisionAPI.Apply(p).GetApproximationAttr()
+                if approx.Get() in (None, "none", "meshSimplification"):
+                    approx.Set("convexHull")
         top_ok = abs(bw.GetMax()[2] - table_top) < 0.002
-        checks.append((top_ok and belt.HasAPI(UsdPhysics.CollisionAPI),
+        checks.append((top_ok and bool(colliders),
                        f"{name}: ConveyorBelt_A06 x{s:.3f}, mat bang z={bw.GetMax()[2]:.4f} (ban {table_top:.4f}), "
                        f"dai {belt_len:.2f} m, rong {belt_w:.2f} m, x [{x_end:.3f}..{x_start:.3f}], y={y:.3f}"))
 

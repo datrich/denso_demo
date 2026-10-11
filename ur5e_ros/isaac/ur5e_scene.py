@@ -83,9 +83,9 @@ OBJECTS = os.environ.get("UR5E_OBJECTS", "hope").strip().lower()
 # 2 bang chuyen sau robot + thung KLT (isaac/conveyor_line.py); 0 = dat vat thanh hang tren ban nhu cu
 CONVEYORS = os.environ.get("UR5E_CONVEYORS", "1") == "1" and OBJECTS != "cube"
 CONVEYOR_EXT = "isaacsim.asset.gen.conveyor"
-if CONVEYORS:  # khung hinh rong hon: ban + 2 bang chuyen + thung
-    DEMO_CAM_EYE = (0.85, 1.65, 1.85)
-    DEMO_CAM_TARGET = (-0.50, -0.08, 0.72)
+if CONVEYORS:  # ban + 2 bang chuyen + thung, nam o 70% ben phai khung (ben trai la cot anh D435 ghep vao)
+    DEMO_CAM_EYE = (0.60, 0.80, 2.10)
+    DEMO_CAM_TARGET = (-0.30, -0.20, 0.75)
 # bo vat BOP: datasets/bop_<ten>/usd (tao bang tools/bop_to_usd.py --dataset <ten> --fetch)
 OBJ_ROOT = WORKSPACE / "datasets" / f"bop_{OBJECTS}"
 OBJ_MANIFEST = OBJ_ROOT / "usd" / "objects.json"
