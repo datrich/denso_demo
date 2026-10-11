@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
 # Chay Isaac Sim HEADLESS (khong cua so, khong dung toi man hinh dang dung) tren 1 GPU rieng.
-#   GPU=1 bash ur5e_ros/linux/sim_headless.sh          # mac dinh GPU 1, co camera toan canh
-# Bien: GPU, UR5E_DEMO_CAM (1), UR5E_OBJECTS (hope|cube), ISAAC_ROOT, ISAAC_PORTABLE_ROOT, NICE (10)
+#   bash ur5e_ros/linux/sim_headless.sh                 # GPU=auto: chon GPU trong nhat; GPU=1 de ep
+#   UR5E_OBJECTS=itodd bash ur5e_ros/linux/sim_headless.sh   # chi tiet co khi thay do gia dung
+# Bien: GPU (auto|0|1), UR5E_DEMO_CAM (1), UR5E_OBJECTS (hope|itodd|cube), ISAAC_ROOT, ISAAC_PORTABLE_ROOT, NICE (10)
 set -eo pipefail  # khong dung -u: setup.bash cua ROS tham chieu bien chua dat
+GPU="${GPU:-auto}"
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+
+# GPU=auto: chon GPU con trong nhieu VRAM nhat luc khoi dong (may dung chung)
+if [ "$GPU" = "auto" ]; then
+    nvidia-smi --query-gpu=index,memory.used,memory.free,utilization.gpu --format=csv,noheader
+    GPU=$(nvidia-smi --query-gpu=index,memory.free --format=csv,noheader,nounits | sort -t, -k2 -nr | head -1 | cut -d, -f1 | tr -d ' ')
+    echo "GPU=auto -> chon GPU $GPU (nhieu VRAM trong nhat)"
+fi
 
 export UR5E_DEMO_CAM="${UR5E_DEMO_CAM:-1}"
 # KHONG dat CUDA_VISIBLE_DEVICES: RTX renderer phai ghep GPU Vulkan voi GPU CUDA cung chi so,

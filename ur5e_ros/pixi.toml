@@ -52,6 +52,7 @@ pick-place = { cmd = "python tools\\pick_place_demo.py", description = "Gap - da
 # Chuyen model BOP HOPE (PLY, mm) -> USD co vat ly cho Isaac Sim
 bop-to-usd = { cmd = "python tools\\bop_to_usd.py", description = "PLY BOP -> USD (datasets/bop_hope/usd)" }
 fetch-hope = { cmd = "python tools\\bop_to_usd.py --fetch", description = "Tai 5 vat HOPE tu Hugging Face + chuyen USD" }
+fetch-itodd = { cmd = "python tools\\bop_to_usd.py --dataset itodd --fetch", description = "Tai 5 chi tiet co khi ITODD + chuyen USD" }
 # Kiem tra ket noi sim <-> ROS 2 (them "-- --move" de thu chuyen dong)
 check-sim = { cmd = "python tools\\check_sim.py", description = "Kiem tra joint_states, clock, camera, tf" }
 

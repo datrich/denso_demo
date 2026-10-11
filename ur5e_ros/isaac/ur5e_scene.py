@@ -73,8 +73,10 @@ DEMO_CAM_TARGET = (-0.05, -0.08, 0.80)  # giua ban, hang vat gap / dat
 
 # Vat tren ban: "hope" = 5 vat BOP HOPE (tools/bop_to_usd.py), "cube" = khoi lap phuong thu
 OBJECTS = os.environ.get("UR5E_OBJECTS", "hope").strip().lower()
-HOPE_ROOT = WORKSPACE / "datasets" / "bop_hope"
-HOPE_MANIFEST = HOPE_ROOT / "usd" / "objects.json"
+# bo vat BOP: datasets/bop_<ten>/usd (tao bang tools/bop_to_usd.py --dataset <ten> --fetch)
+OBJ_ROOT = WORKSPACE / "datasets" / f"bop_{OBJECTS}"
+OBJ_MANIFEST = OBJ_ROOT / "usd" / "objects.json"
+HOPE_ROOT, HOPE_MANIFEST = OBJ_ROOT, OBJ_MANIFEST  # ten cu
 OBJECTS_CONFIG = _THIS.parents[1] / "config" / "objects.json"  # cho tools/pick_place_demo.py
 # Hang vat can gap / hang dich (khung base_link), moi vat 1 goc xoay khac nhau de thu canh huong gap
 PICK_X, PLACE_X = 0.52, 0.30
@@ -322,8 +324,9 @@ def _add_test_cube(stage, robot_pos, top, rng):
 def _add_hope_objects(stage, robot_pos, top, rng):
     """Dat cac vat BOP HOPE (USD da co vat ly) thanh 1 hang tren ban; ghi config/objects.json."""
     if not HOPE_MANIFEST.exists():
-        return [], [(False, f"khong tim thay {HOPE_MANIFEST} - chay 'pixi run bop-to-usd' truoc")]
-    manifest = json.loads(HOPE_MANIFEST.read_text(encoding="utf-8"))["objects"][: len(SLOT_Y)]
+        return [], [(False, f"khong tim thay {HOPE_MANIFEST} - chay 'tools/bop_to_usd.py --dataset {OBJECTS} --fetch' truoc")]
+    manifest_doc = json.loads(HOPE_MANIFEST.read_text(encoding="utf-8"))
+    manifest = manifest_doc["objects"][: len(SLOT_Y)]
     UsdGeom.Scope.Define(stage, "/Objects")
     checks, paths, cfg = [], [], []
     for o, sy, yaw in zip(manifest, SLOT_Y, PICK_YAW_DEG):
@@ -342,14 +345,15 @@ def _add_hope_objects(stage, robot_pos, top, rng):
         mass = UsdPhysics.MassAPI(prim).GetMassAttr().Get() if prim.HasAPI(UsdPhysics.MassAPI) else None
         inside = rng.GetMin()[0] + 0.05 < x < rng.GetMax()[0] - 0.05 and rng.GetMin()[1] + 0.05 < y < rng.GetMax()[1] - 0.05
         ok = (prim.HasAPI(UsdPhysics.RigidBodyAPI) and mesh and mesh.HasAPI(UsdPhysics.CollisionAPI)
-              and approx == "convexHull" and mass and inside)
+              and approx in ("convexHull", "convexDecomposition") and mass and inside)
         checks.append((ok, f"{o['name']} (HOPE obj_{o['obj_id']:06d}) {[round(v * 1000) for v in o['size_m']]} mm, "
                            f"{mass} kg, {approx}, yaw {yaw:+.0f} deg, tren ban={inside}"))
         paths.append(path)
         cfg.append({"name": o["name"], "frame": o["name"], "obj_id": o["obj_id"], "size_m": o["size_m"],
                     "pick_xy": [PICK_X, sy], "pick_yaw_deg": yaw, "place_xy": [PLACE_X, sy]})
     OBJECTS_CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    OBJECTS_CONFIG.write_text(json.dumps({"dataset": "BOP HOPE", "table_z": round(top - robot_pos[2], 5),
+    OBJECTS_CONFIG.write_text(json.dumps({"dataset": manifest_doc.get("dataset", OBJECTS), "set": OBJECTS,
+                                          "manifest": HOPE_MANIFEST.as_posix(), "table_z": round(top - robot_pos[2], 5),
                                           "objects": cfg}, indent=2), encoding="utf-8")
     return paths, checks
 

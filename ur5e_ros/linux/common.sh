@@ -5,7 +5,7 @@ REPO_ROS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # .../denso_demo/u
 REPO="$(dirname "$REPO_ROS")"                                    # .../denso_demo
 ISAAC_ROOT="${ISAAC_ROOT:-$HOME/isaacsim}"
 VENV="${VENV:-$REPO/.venv-linux}"
-GPU="${GPU:-1}"
+GPU="${GPU:-auto}"
 
 # ROS 2 Jazzy: dung env.sh cua workspace neu co (ROS_DOMAIN_ID, chi localhost), khong thi ROS he thong
 ROS_ENV="${ROS_ENV:-$HOME/ros2_ws/env.sh}"

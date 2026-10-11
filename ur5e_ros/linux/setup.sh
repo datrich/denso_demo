@@ -18,6 +18,7 @@ print("ffmpeg:", imageio_ffmpeg.get_ffmpeg_exe())
 print("usd-core", Usd.GetVersion(), "| numpy", numpy.__version__, "| rclpy OK")
 EOF
 cd "$REPO_ROS"
-python tools/bop_to_usd.py --fetch
+python tools/bop_to_usd.py --dataset hope --fetch
+python tools/bop_to_usd.py --dataset itodd --fetch
 python -m pytest -q -p no:launch_testing -p no:launch_ros tests 2>/dev/null || python -m unittest 2>/dev/null || true
 echo "Xong. Chay sim: bash ur5e_ros/linux/sim_headless.sh"

@@ -77,8 +77,10 @@ def main():
     table_z = scene["table_z"]
     objects = [o for o in scene["objects"] if not args.only or o["name"] in args.only]
     grasp_h, tapered = {}, {}
-    if HOPE_MANIFEST.exists():
-        for m in json.loads(HOPE_MANIFEST.read_text(encoding="utf-8"))["objects"]:
+    manifest = Path(scene.get("manifest", HOPE_MANIFEST))  # scene ghi duong dan bo vat dang dung
+    print(f"Bo vat: {scene.get('dataset', '?')}")
+    if manifest.exists():
+        for m in json.loads(manifest.read_text(encoding="utf-8"))["objects"]:
             grasp_h[m["name"]] = m.get("grasp_height_m")
             tapered[m["name"]] = m.get("tapered", False)
 
@@ -160,7 +162,7 @@ def main():
         ctrl.move_pose_linear(pose([p[0], p[1], grasp_z], r_pick), ros.joint_state()[0])
         e2 = run()
         f = gripper(grip["closed_rad"], wait=1.8)
-        holding = math.degrees(f) < math.degrees(grip["closed_rad"]) - 3.0
+        holding = math.degrees(f) < math.degrees(grip["closed_rad"]) - 1.5  # vat mong (bu long 8 mm) dong gan het
         print(f"   kep: ngon dung o {math.degrees(f):.1f} deg -> {'dang giu vat' if holding else 'KHONG kep duoc'}" + (f" ({e1 or e2})" if e1 or e2 else ""))
         ctrl.move_pose_linear(pose([p[0], p[1], transit_z], r_pick), ros.joint_state()[0])
         run()
