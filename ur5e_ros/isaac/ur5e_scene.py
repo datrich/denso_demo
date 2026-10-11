@@ -28,6 +28,7 @@ Bien moi truong tuy chon:
     UR5E_ROBOTIQ_ASSETS  thu muc clone robotiq/isaacsim_assets (mac dinh ../robotiq_isaacsim_assets)
     UR5E_OBJECTS=cube    dung khoi lap phuong thay cho 5 vat BOP HOPE (mac dinh: hope)
     UR5E_HIDE_PRIMS      prim cua scene goc can an, phan cach dau phay (mac dinh: chai trang; "" = giu)
+    UR5E_CAM_YAW_DEG     xoay camera D435 quanh truc khop co tay (mac dinh 90: tranh nhin vao ngon kep; 0 = goc)
 """
 
 import asyncio
@@ -106,6 +107,9 @@ DEFAULT_ROBOT_POS = (-0.37301266253241205, -0.04873248472807018, 0.7405869357032
 # Vi tri d435_mount so voi wrist_3_link (lay tu scene cua Hung)
 D435_MOUNT_T = (0.004051560494559514, 0.10352482402905805, 0.042623558882600276)
 D435_MOUNT_Q = (0.6345022587886923, -0.30932993825419125, -0.3310448163296172, -0.6262038026657102)  # w, x, y, z
+# Xoay ca gia camera quanh truc khop co tay (+Z cua wrist_3_link). 2 ngon 2F-85 nam o +-Y cua wrist_3:
+# 0 = vi tri goc cua Hung (+Y, ngay sau ngon phai -> ngon che giua anh); 90 = sang -X, nhin giua 2 ngon
+D435_YAW_DEG = float(os.environ.get("UR5E_CAM_YAW_DEG", "90"))
 # camera_bottom_screw_frame -> camera_color_frame (realsense2_description, D435)
 D435_COLOR_OFFSET = (0.0, 0.0325, 0.0125)
 CAM_W, CAM_H, CAM_HFOV_DEG = 640, 480, 69.0  # D435 color
@@ -189,6 +193,8 @@ def _add_temp_d435(stage, wrist3_path):
     """Camera tam: dat dung vi tri d435_mount cua Hung, nhin doc +X cua mount (truc nhin cua D435)."""
     mount = UsdGeom.Xform.Define(stage, f"{wrist3_path}/d435_mount_temp")
     mount.ClearXformOpOrder()
+    if D435_YAW_DEG:  # op dau tien = ngoai cung -> xoay quanh truc Z cua wrist_3_link (truc khop co tay)
+        mount.AddRotateZOp(UsdGeom.XformOp.PrecisionDouble, "wristYaw").Set(D435_YAW_DEG)
     mount.AddTranslateOp().Set(Gf.Vec3d(*D435_MOUNT_T))
     w, x, y, z = D435_MOUNT_Q
     mount.AddOrientOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Quatd(w, x, y, z))
