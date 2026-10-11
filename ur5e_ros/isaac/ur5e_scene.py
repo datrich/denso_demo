@@ -83,6 +83,8 @@ OBJECTS = os.environ.get("UR5E_OBJECTS", "hope").strip().lower()
 # 2 bang chuyen sau robot + thung KLT (isaac/conveyor_line.py); 0 = dat vat thanh hang tren ban nhu cu
 CONVEYORS = os.environ.get("UR5E_CONVEYORS", "1") == "1" and OBJECTS != "cube"
 CONVEYOR_EXT = "isaacsim.asset.gen.conveyor"
+# physx: PhysxSurfaceVelocityAPI theo he the gioi (mac dinh); node: node IsaacConveyor (co cuon texture)
+CONVEYOR_MODE = os.environ.get("UR5E_CONVEYOR_MODE", "physx").strip().lower()
 if CONVEYORS:  # ban + 2 bang chuyen + thung, nam o 70% ben phai khung (ben trai la cot anh D435 ghep vao)
     DEMO_CAM_EYE = (0.95, 1.80, 1.95)
     DEMO_CAM_TARGET = (-0.21, -0.27, 0.72)
@@ -503,8 +505,17 @@ def _add_conveyors(stage, robot_pos, top, rng):
     return conv["lines"], checks
 
 
+def _velocity_world(line):
+    return [line["direction_xy"][0] * line["speed_mps"], line["direction_xy"][1] * line["speed_mps"], 0.0]
+
+
 def _build_conveyor_graph(stage, lines):
-    """Node IsaacConveyor cho moi bang (van toc be mat + cuon texture); khong co node -> PhysxSurfaceVelocityAPI."""
+    """Van toc mat bang: PhysxSurfaceVelocityAPI theo he the gioi, hoac node IsaacConveyor (UR5E_CONVEYOR_MODE=node)."""
+    if CONVEYOR_MODE != "node":
+        for line in lines:
+            cl.apply_surface_velocity(stage, line["belt_prim"], _velocity_world(line))
+        return [(True, f"bang chuyen: PhysxSurfaceVelocityAPI (he the gioi) x{len(lines)}, "
+                       f"{[_velocity_world(line) for line in lines]} m/s")]
     keys = og.Controller.Keys
     try:
         nodes = [("OnPlaybackTick", "omni.graph.action.OnPlaybackTick")]
@@ -527,8 +538,53 @@ def _build_conveyor_graph(stage, lines):
         if stage.GetPrimAtPath("/Conveyors/Graph"):
             stage.RemovePrim("/Conveyors/Graph")
         for line in lines:
-            cl.apply_surface_velocity(stage, line["belt_prim"], float(line["speed_mps"]))
+            cl.apply_surface_velocity(stage, line["belt_prim"], _velocity_world(line))
         return [(True, f"bang chuyen: PhysxSurfaceVelocityAPI x{len(lines)}, {lines[0]['speed_mps']} m/s (khong cuon texture)")]
+
+
+async def _conveyor_selftest(stage, lines, settle=0.5, duration=2.0):
+    """Sau khi Play: tha khoi 4 cm len moi bang, do van toc thuc te theo thoi gian sim, roi xoa khoi."""
+    from omni.physx import get_physx_interface
+
+    timeline = omni.timeline.get_timeline_interface()
+    while not timeline.is_playing():
+        await _frames(1)
+    await _frames(30)
+    cubes = []
+    for line in lines:
+        x, y, z = line["drop_world"]
+        path = f"/Conveyors/SelfTest_{line['name']}"
+        cube = UsdGeom.Cube.Define(stage, path)
+        cube.CreateSizeAttr(0.04)
+        cube.AddTranslateOp().Set(Gf.Vec3d(x, y, z + 0.021))
+        UsdPhysics.RigidBodyAPI.Apply(cube.GetPrim())
+        UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
+        UsdPhysics.MassAPI.Apply(cube.GetPrim()).CreateMassAttr(0.1)
+        cubes.append((line, path))
+    px = get_physx_interface()
+
+    async def sample():
+        await _frames(1)
+        return timeline.get_current_time(), {p: px.get_rigidbody_transformation(p)["position"] for _, p in cubes}
+
+    t0 = timeline.get_current_time()
+    while timeline.get_current_time() - t0 < settle:
+        await _frames(1)
+    ta, pa = await sample()
+    while timeline.get_current_time() - ta < duration:
+        await _frames(1)
+    tb, pb = await sample()
+    ok_all = True
+    for line, path in cubes:
+        v = [(pb[path][i] - pa[path][i]) / (tb - ta) for i in range(3)]
+        want = _velocity_world(line)
+        err = math.hypot(v[0] - want[0], v[1] - want[1])
+        ok = err < 0.3 * line["speed_mps"]
+        ok_all &= ok
+        log(f"CHECK {'PASS' if ok else 'FAIL'} tu kiem tra {line['name']}: khoi 4 cm chay ({v[0]:+.3f}, {v[1]:+.3f}, {v[2]:+.3f}) m/s, "
+            f"mong doi ({want[0]:+.3f}, {want[1]:+.3f}) [{CONVEYOR_MODE}]")
+        stage.RemovePrim(path)
+    log(f"CONVEYOR TEST {'OK' if ok_all else 'LOI'}")
 
 
 def _build_camera_graph(camera_path, graph="/ROS2/Camera", width=CAM_W, height=CAM_H, helpers=None):
@@ -711,6 +767,8 @@ async def build():
         log(f"khong dat duoc goc nhin viewport: {exc}")
 
     await _frames(5)
+    if conveyor_lines:  # chay khi bam Play; in "CONVEYOR TEST OK/LOI" (cho dong nay truoc khi chay demo)
+        asyncio.ensure_future(_conveyor_selftest(stage, conveyor_lines))
     if os.environ.get("UR5E_AUTOPLAY", "1") != "0":
         omni.timeline.get_timeline_interface().play()
         log("Da bam Play. Panel: pixi run panel")

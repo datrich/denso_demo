@@ -39,6 +39,7 @@ TRANSIT_ABOVE_TABLE = 0.26
 PLACE_GAP = 0.004   # tha vat cach mat ban 4 mm
 BELT_GAP = 0.01     # tha vat cach mat bang chuyen 1 cm
 BIN_WAIT = 25.0     # giay (sim) toi da cho vat cuoi cung vao thung
+TRANSIT_SPEED_CONVEYOR = 0.15  # he so toc do khi xoay ra bang chuyen phia sau (mac dinh demo 0.4)
 
 
 def quat_to_R(q):
@@ -174,7 +175,8 @@ def main():
         ctrl.move_pose_linear(pose([p[0], p[1], grasp_z], r_pick), ros.joint_state()[0])
         e2 = run()
         f = gripper(grip["closed_rad"], wait=1.8)
-        holding = math.degrees(f) < math.degrees(grip["closed_rad"]) - 1.5  # vat mong (bu long 8 mm) dong gan het
+        # vat mong (bu long 8 mm) dong gan het; ngon van mo (< 3 deg) = khong kep (vd. vat da do)
+        holding = 3.0 < math.degrees(f) < math.degrees(grip["closed_rad"]) - 1.5
         print(f"   kep: ngon dung o {math.degrees(f):.1f} deg -> {'dang giu vat' if holding else 'KHONG kep duoc'}" + (f" ({e1 or e2})" if e1 or e2 else ""))
         ctrl.move_pose_linear(pose([p[0], p[1], transit_z], r_pick), ros.joint_state()[0])
         run()
@@ -198,8 +200,13 @@ def main():
             px, py = o["place_xy"]
             r_place = tool_rot(np.array([1.0, 0.0, 0.0]), tcp()[:3, 1])
             place_z = table_z + hold_below + PLACE_GAP
+        # sang bang chuyen phia sau = xoay de ~130 deg: chay cham de vat nang (ClampBlock) khong truot khoi ngon
+        speed = ctrl.speed
+        if line:
+            ctrl.speed = min(speed, TRANSIT_SPEED_CONVEYOR)
         ctrl.move_pose_joint(pose([px, py, transit_z], r_place), ros.joint_state()[0])
         run()
+        ctrl.speed = speed
         tilt_transit = math.degrees(math.acos(min(1.0, obj_pose(o["frame"])[1][2, 2])))
         ctrl.move_pose_linear(pose([px, py, place_z], r_place), ros.joint_state()[0])
         run()
@@ -210,7 +217,9 @@ def main():
             q, rq = obj_pose(o["frame"])
             moved = (np.array([q[0] - px, q[1] - py]) @ np.array(line["direction_xy"])) * 1000
             tilt = math.degrees(math.acos(min(1.0, rq[2, 2])))
-            on_belt = abs((q[2] - sz / 2) - line["belt_z"]) < 0.015
+            bx0, bx1 = line["belt_x_range"]  # mat bang cung do cao voi ban -> kiem tra ca x, y
+            on_belt = (abs((q[2] - sz / 2) - line["belt_z"]) < 0.015 and bx0 < q[0] < bx1
+                       and abs(q[1] - line["drop_xy"][1]) < line["belt_width_m"] / 2)
             print(f"   tha len {line['name']}: nghieng {tilt:.1f} deg, tren bang={on_belt}, bang da keo {moved:.0f} mm")
             ctrl.move_pose_linear(pose([px, py, transit_z], r_place), ros.joint_state()[0])
             run()

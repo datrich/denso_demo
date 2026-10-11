@@ -139,6 +139,7 @@ def build(stage: Usd.Stage, assets_root: str, robot_pos, table_top: float, table
             "belt_z": round(table_top - rz, 5),
             "direction_xy": [-1.0, 0.0],
             "speed_mps": BELT_SPEED,
+            "drop_world": [round(x_start - DROP_FROM_START, 4), round(y, 4), round(table_top, 4)],
             "belt_x_range": [round(x_end - rx, 4), round(x_start - rx, 4)],
             "belt_width_m": round(belt_w, 4),
             "bin": {
@@ -149,11 +150,11 @@ def build(stage: Usd.Stage, assets_root: str, robot_pos, table_top: float, table
     return {"lines": lines}, checks
 
 
-def apply_surface_velocity(stage: Usd.Stage, belt_path: str, speed: float) -> bool:
-    """Du phong khi khong co node IsaacConveyor: van toc be mat co dinh doc +X cua mat bang (local)."""
+def apply_surface_velocity(stage: Usd.Stage, belt_path: str, velocity_world) -> bool:
+    """Van toc be mat co dinh, khai bao theo he THE GIOI (khong phu thuoc xoay/ti le cua asset)."""
     belt = stage.GetPrimAtPath(belt_path)
     belt.AddAppliedSchema("PhysxSurfaceVelocityAPI")
     belt.CreateAttribute("physxSurfaceVelocity:surfaceVelocityEnabled", Sdf.ValueTypeNames.Bool).Set(True)
-    belt.CreateAttribute("physxSurfaceVelocity:surfaceVelocityLocalSpace", Sdf.ValueTypeNames.Bool).Set(True)
-    belt.CreateAttribute("physxSurfaceVelocity:surfaceVelocity", Sdf.ValueTypeNames.Vector3f).Set(Gf.Vec3f(speed, 0, 0))
+    belt.CreateAttribute("physxSurfaceVelocity:surfaceVelocityLocalSpace", Sdf.ValueTypeNames.Bool).Set(False)
+    belt.CreateAttribute("physxSurfaceVelocity:surfaceVelocity", Sdf.ValueTypeNames.Vector3f).Set(Gf.Vec3f(*velocity_world))
     return True
