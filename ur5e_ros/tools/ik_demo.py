@@ -16,7 +16,7 @@ import rclpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "panel"))
 import ur5e_kinematics as kin  # noqa: E402
-from ur5e_panel import RosBridge, MotionController  # noqa: E402
+from ur5e_control import RosBridge, MotionController  # noqa: E402
 
 READY = np.radians([0.0, -90.0, 90.0, -90.0, -90.0, 0.0])
 

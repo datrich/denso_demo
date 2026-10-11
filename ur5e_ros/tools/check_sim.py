@@ -130,7 +130,7 @@ def main():
             print(f"[WARN] khong doc duoc /tf base_link->wrist_3_link: {exc}")
             print("       frame co tren /tf:", n.tf_buffer.all_frames_as_string()[:600])
 
-    from ur5e_panel import load_gripper_config  # noqa: E402
+    from ur5e_control import load_gripper_config  # noqa: E402
 
     grip = load_gripper_config()
     if grip:

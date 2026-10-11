@@ -13,3 +13,9 @@ datasets/
 # Ghi chu nghien cuu ca nhan
 papers_analysis.md
 papers_table.md
+
+# Chay tren Linux (ur5e_ros/linux/*.sh)
+.venv-linux/
+.isaac_portable/
+logs/
+recordings/

@@ -24,7 +24,7 @@ from rclpy.time import Time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "panel"))
 import ur5e_kinematics as kin  # noqa: E402
-from ur5e_panel import MotionController, RosBridge, load_gripper_config  # noqa: E402
+from ur5e_control import MotionController, RosBridge, load_gripper_config  # noqa: E402
 
 OBJECTS_FILE = Path(__file__).resolve().parents[1] / "config" / "objects.json"
 # do cao kep tinh tu profile be rong cua mesh (tools/bop_to_usd.py)

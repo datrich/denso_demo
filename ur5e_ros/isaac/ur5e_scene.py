@@ -64,6 +64,13 @@ PHYSICS_HZ = 120
 ARTICULATION_ITERATIONS = (255, 4)
 CAM_TICK_HZ = 30.0  # omni:sensor:tickRate (thay cho frameSkipCount da deprecated)
 
+# Camera toan canh de quay video (UR5E_DEMO_CAM=1): /demo_cam/rgb 1280x720
+DEMO_CAM = os.environ.get("UR5E_DEMO_CAM", "0") == "1"
+DEMO_CAM_PATH = "/DemoCamera"
+DEMO_CAM_W, DEMO_CAM_H = 1280, 720
+DEMO_CAM_EYE = (0.95, 1.05, 1.40)       # toa do the gioi (m)
+DEMO_CAM_TARGET = (-0.05, -0.08, 0.80)  # giua ban, hang vat gap / dat
+
 # Vat tren ban: "hope" = 5 vat BOP HOPE (tools/bop_to_usd.py), "cube" = khoi lap phuong thu
 OBJECTS = os.environ.get("UR5E_OBJECTS", "hope").strip().lower()
 HOPE_ROOT = WORKSPACE / "datasets" / "bop_hope"
@@ -445,9 +452,22 @@ def _set_camera_rate(stage, camera_path):
     return [(math.isclose(rate, CAM_TICK_HZ), f"camera {camera_path.rsplit('/', 2)[-2]} tickRate = {rate} Hz")]
 
 
-def _build_camera_graph(camera_path):
+def _add_demo_camera(stage):
+    """Camera nhin toan canh ban + robot (quay video demo, nhat la khi chay headless)."""
+    cam = UsdGeom.Camera.Define(stage, DEMO_CAM_PATH)
+    view = Gf.Matrix4d().SetLookAt(Gf.Vec3d(*DEMO_CAM_EYE), Gf.Vec3d(*DEMO_CAM_TARGET), Gf.Vec3d(0, 0, 1))
+    UsdGeom.Xformable(cam).AddTransformOp().Set(view.GetInverse())  # look-at: world->camera, can nghich dao
+    h_ap = 20.955
+    cam.CreateHorizontalApertureAttr(h_ap)
+    cam.CreateVerticalApertureAttr(h_ap * DEMO_CAM_H / DEMO_CAM_W)
+    cam.CreateFocalLengthAttr(16.0)
+    cam.CreateClippingRangeAttr(Gf.Vec2f(0.05, 50.0))
+    return str(cam.GetPath())
+
+
+def _build_camera_graph(camera_path, graph="/ROS2/Camera", width=CAM_W, height=CAM_H, helpers=None):
     keys = og.Controller.Keys
-    helpers = [
+    helpers = helpers or [
         ("RgbPublish", "isaacsim.ros2.bridge.ROS2CameraHelper", "camera/color/image_raw", "rgb"),
         ("DepthPublish", "isaacsim.ros2.bridge.ROS2CameraHelper", "camera/depth/image_rect_raw", "depth"),
         ("CameraInfoPublish", "isaacsim.ros2.bridge.ROS2CameraInfoHelper", "camera/color/camera_info", None),
@@ -464,8 +484,8 @@ def _build_camera_graph(camera_path):
     ]
     values = [
         ("RenderProduct.inputs:cameraPrim", [usdrt.Sdf.Path(camera_path)]),
-        ("RenderProduct.inputs:width", CAM_W),
-        ("RenderProduct.inputs:height", CAM_H),
+        ("RenderProduct.inputs:width", width),
+        ("RenderProduct.inputs:height", height),
     ]
     for name, _, topic, kind in helpers:
         connect += [
@@ -475,13 +495,13 @@ def _build_camera_graph(camera_path):
         ]
         values += [
             (f"{name}.inputs:topicName", topic),
-            (f"{name}.inputs:frameId", "camera_color_optical_frame"),
+            (f"{name}.inputs:frameId", "demo_camera" if graph != "/ROS2/Camera" else "camera_color_optical_frame"),
             (f"{name}.inputs:resetSimulationTimeOnStop", True),
         ]
         if kind:
             values.append((f"{name}.inputs:type", kind))
     og.Controller.edit(
-        {"graph_path": "/ROS2/Camera", "evaluator_name": "execution"},
+        {"graph_path": graph, "evaluator_name": "execution"},
         {keys.CREATE_NODES: create, keys.CONNECT: connect, keys.SET_VALUES: values},
     )
 
@@ -578,6 +598,9 @@ async def build():
 
     if camera_path and os.environ.get("UR5E_NO_CAMERA", "0") != "1":
         checks += _set_camera_rate(stage, camera_path)
+    demo_cam = _add_demo_camera(stage) if DEMO_CAM else None
+    if demo_cam:
+        checks += _set_camera_rate(stage, demo_cam)
 
     for ok, msg in checks:
         log(f"CHECK {'PASS' if ok else 'FAIL'} {msg}")
@@ -589,6 +612,10 @@ async def build():
         log("UR5E_NO_CAMERA=1 -> khong tao graph camera (chan doan)")
     elif camera_path:
         _build_camera_graph(camera_path)
+    if demo_cam:
+        _build_camera_graph(demo_cam, graph="/ROS2/DemoCamera", width=DEMO_CAM_W, height=DEMO_CAM_H,
+                            helpers=[("RgbPublish", "isaacsim.ros2.bridge.ROS2CameraHelper", "demo_cam/rgb", "rgb")])
+        log(f"Camera toan canh {DEMO_CAM_W}x{DEMO_CAM_H} -> /demo_cam/rgb")
     else:
         log("Khong tim thay camera -> bo qua graph camera")
 
