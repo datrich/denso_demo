@@ -1,11 +1,13 @@
-"""Demo pick & place 5 vat BOP HOPE bang UR5e + Robotiq 2F-85 (chay khi Isaac Sim dang Play).
+"""Demo pick & place 5 vat BOP bang UR5e + Robotiq 2F-85 (chay khi Isaac Sim dang Play).
 
-    pixi run pick-place                 # gap tung vat o hang xa, dat ngay ngan vao hang gan robot
+    pixi run pick-place                 # gap tung vat o hang xa -> bang chuyen -> thung (hoac hang gan robot)
     pixi run pick-place -- --only Yogurt Butter
 
 Voi moi vat: doc pose tu /tf -> chon truc hep nhat theo phuong ngang lam huong kep -> tiep can
-tu tren xuong (MoveJ + MoveL) -> dong gripper -> nang -> xoay cho truc hep doc theo X (xep ngay ngan)
--> dat vao o dich -> nha -> kiem tra vi tri / dung thang tu /tf.
+tu tren xuong (MoveJ + MoveL) -> dong gripper -> nang -> dat -> nha -> kiem tra tu /tf.
+- Scene co bang chuyen (config/objects.json co 'conveyors'): dat vat sat mat bang (truc hep ngang bang, canh
+  dai doc chieu chay de vat khong do), bang dua vat roi vao thung; cuoi demo kiem tra vat nam trong thung.
+- Khong co bang chuyen: xoay cho truc hep doc theo X, dat ngay ngan vao hang gan robot.
 """
 
 import argparse
@@ -35,6 +37,8 @@ GRASP_DEPTH = 0.03  # TCP thap hon dinh vat 3 cm
 MIN_TCP_ABOVE_TABLE = 0.025  # dau ngon khong cham ban
 TRANSIT_ABOVE_TABLE = 0.26
 PLACE_GAP = 0.004   # tha vat cach mat ban 4 mm
+BELT_GAP = 0.01     # tha vat cach mat bang chuyen 1 cm
+BIN_WAIT = 25.0     # giay (sim) toi da cho vat cuoi cung vao thung
 
 
 def quat_to_R(q):
@@ -76,6 +80,7 @@ def main():
     scene = json.loads(OBJECTS_FILE.read_text(encoding="utf-8"))
     table_z = scene["table_z"]
     objects = [o for o in scene["objects"] if not args.only or o["name"] in args.only]
+    lines = scene.get("conveyors") or []
     grasp_h, tapered = {}, {}
     manifest = Path(scene.get("manifest", HOPE_MANIFEST))  # scene ghi duong dan bo vat dang dung
     print(f"Bo vat: {scene.get('dataset', '?')}")
@@ -123,12 +128,19 @@ def main():
             return 1
         time.sleep(0.1)
 
+    def in_bin(frame, line):
+        q, _ = obj_pose(frame)
+        lo, hi = line["bin"]["min"], line["bin"]["max"]
+        return lo[0] < q[0] < hi[0] and lo[1] < q[1] < hi[1] and q[2] < hi[2], q
+
     print(f"Gripper 2F-85, TCP {ctrl.tcp_z * 1000:.1f} mm, mat ban z = {table_z * 1000:.1f} mm (base_link)")
+    for line in lines:
+        print(f"Bang chuyen {line['name']}: tha tai {line['drop_xy']}, {line['speed_mps']} m/s -> thung, vat: {', '.join(line.get('objects', []))}")
     gripper(grip["open_rad"], wait=0.5)
     ctrl.move_joint(READY, ros.joint_state()[0])
     run()
 
-    results = []
+    results, pending = [], []  # pending: vat dang tren bang chuyen, cho vao thung
     for o in objects:
         name, (sx, sy, sz) = o["name"], o["size_m"]
         print(f"\n=== {name} ({sx * 1000:.0f} x {sy * 1000:.0f} x {sz * 1000:.0f} mm) ===")
@@ -174,10 +186,18 @@ def main():
             results.append((name, False, "khong nang duoc"))
             continue
 
-        # dat: truc hep cua vat doc theo X cua robot -> hang vat ngay ngan
-        px, py = o["place_xy"]
-        r_place = tool_rot(np.array([1.0, 0.0, 0.0]), tcp()[:3, 1])
-        place_z = table_z + hold_below + PLACE_GAP
+        line = lines[o["conveyor"]] if lines and o.get("conveyor") is not None else None
+        if line:
+            # bang chuyen: truc hep ngang bang (vuong goc chieu chay) -> canh dai doc chieu chay, vat kho do
+            px, py = line["drop_xy"]
+            d = line["direction_xy"]
+            r_place = tool_rot(np.array([-d[1], d[0], 0.0]), tcp()[:3, 1])
+            place_z = line["belt_z"] + hold_below + BELT_GAP
+        else:
+            # dat: truc hep cua vat doc theo X cua robot -> hang vat ngay ngan
+            px, py = o["place_xy"]
+            r_place = tool_rot(np.array([1.0, 0.0, 0.0]), tcp()[:3, 1])
+            place_z = table_z + hold_below + PLACE_GAP
         ctrl.move_pose_joint(pose([px, py, transit_z], r_place), ros.joint_state()[0])
         run()
         tilt_transit = math.degrees(math.acos(min(1.0, obj_pose(o["frame"])[1][2, 2])))
@@ -185,6 +205,18 @@ def main():
         run()
         tilt_down = math.degrees(math.acos(min(1.0, obj_pose(o["frame"])[1][2, 2])))
         print(f"   van chuyen: nghieng {tilt_transit:.1f} deg, ha xuong (truoc khi nha): {tilt_down:.1f} deg")
+        if line:
+            gripper(grip["open_rad"], wait=0.6)
+            q, rq = obj_pose(o["frame"])
+            moved = (np.array([q[0] - px, q[1] - py]) @ np.array(line["direction_xy"])) * 1000
+            tilt = math.degrees(math.acos(min(1.0, rq[2, 2])))
+            on_belt = abs((q[2] - sz / 2) - line["belt_z"]) < 0.015
+            print(f"   tha len {line['name']}: nghieng {tilt:.1f} deg, tren bang={on_belt}, bang da keo {moved:.0f} mm")
+            ctrl.move_pose_linear(pose([px, py, transit_z], r_place), ros.joint_state()[0])
+            run()
+            results.append((name, on_belt and tilt < 20, f"tha len {line['name']} (nghieng {tilt:.0f} deg)"))
+            pending.append((len(results) - 1, o["frame"], line))
+            continue
         gripper(grip["open_rad"], wait=1.0)
         ctrl.move_pose_linear(pose([px, py, transit_z], r_place), ros.joint_state()[0])
         run()
@@ -202,11 +234,23 @@ def main():
 
     ctrl.move_joint(READY, ros.joint_state()[0])
     run()
+    if pending:
+        print(f"\nCho cac vat tren bang chuyen roi vao thung (toi da {BIN_WAIT:.0f} s sim)...")
+        for _ in range(int(BIN_WAIT)):
+            if all(in_bin(frame, line)[0] for _, frame, line in pending):
+                break
+            sim_sleep(ros, 1.0)
+        for i, frame, line in pending:
+            inside, q = in_bin(frame, line)
+            name, ok, msg = results[i]
+            where = f"vao thung {line['name']}" if inside else f"KHONG vao thung {line['name']} (vat o {np.round(q * 1000)} mm)"
+            print(f"   {name}: {where}")
+            results[i] = (name, ok and inside, f"{msg} -> {where}")
     print("\n=== Ket qua ===")
     for name, ok, msg in results:
         print(f"[{'PASS' if ok else 'FAIL'}] {name:17s} {msg}")
     n_ok = sum(ok for _, ok, _ in results)
-    print(f"{n_ok}/{len(results)} vat duoc gap - dat thanh cong")
+    print(f"{n_ok}/{len(results)} vat " + ("duoc gap - tha len bang chuyen - vao dung thung" if lines else "duoc gap - dat thanh cong"))
     ros.destroy_node()
     rclpy.try_shutdown()
     return 0 if n_ok == len(results) else 1

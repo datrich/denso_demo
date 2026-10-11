@@ -29,6 +29,7 @@ Bien moi truong tuy chon:
     UR5E_OBJECTS=cube    dung khoi lap phuong thay cho 5 vat BOP HOPE (mac dinh: hope)
     UR5E_HIDE_PRIMS      prim cua scene goc can an, phan cach dau phay (mac dinh: chai trang; "" = giu)
     UR5E_CAM_YAW_DEG     xoay camera D435 quanh truc khop co tay (mac dinh 90: tranh nhin vao ngon kep; 0 = goc)
+    UR5E_CONVEYORS=0     khong dung 2 bang chuyen + thung (mac dinh 1 voi bo vat BOP)
 """
 
 import asyncio
@@ -49,6 +50,7 @@ from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics, UsdShade
 
 _THIS = Path(globals().get("__file__") or Path.cwd() / "isaac" / "ur5e_scene.py").resolve()
 sys.path.insert(0, str(_THIS.parent))
+import conveyor_line as cl  # noqa: E402
 import robotiq_2f85 as rq  # noqa: E402
 
 WORKSPACE = _THIS.parents[2]  # .../VLA_robot_arm
@@ -78,6 +80,12 @@ HIDE_PRIMS = os.environ.get("UR5E_HIDE_PRIMS", "/NaturalBostonRoundBottle_A01_PR
 
 # Vat tren ban: "hope" = 5 vat BOP HOPE (tools/bop_to_usd.py), "cube" = khoi lap phuong thu
 OBJECTS = os.environ.get("UR5E_OBJECTS", "hope").strip().lower()
+# 2 bang chuyen sau robot + thung KLT (isaac/conveyor_line.py); 0 = dat vat thanh hang tren ban nhu cu
+CONVEYORS = os.environ.get("UR5E_CONVEYORS", "1") == "1" and OBJECTS != "cube"
+CONVEYOR_EXT = "isaacsim.asset.gen.conveyor"
+if CONVEYORS:  # khung hinh rong hon: ban + 2 bang chuyen + thung
+    DEMO_CAM_EYE = (0.85, 1.65, 1.85)
+    DEMO_CAM_TARGET = (-0.50, -0.08, 0.72)
 # bo vat BOP: datasets/bop_<ten>/usd (tao bang tools/bop_to_usd.py --dataset <ten> --fetch)
 OBJ_ROOT = WORKSPACE / "datasets" / f"bop_{OBJECTS}"
 OBJ_MANIFEST = OBJ_ROOT / "usd" / "objects.json"
@@ -479,6 +487,50 @@ def _add_demo_camera(stage):
     return str(cam.GetPath())
 
 
+def _add_conveyors(stage, robot_pos, top, rng):
+    """2 bang chuyen + thung; them muc 'conveyors' va chi so bang cho tung vat vao config/objects.json."""
+    floor_z = rng.GetMin()[2]  # chan ban cham san
+    conv, checks = cl.build(stage, _assets_root(), robot_pos, top, rng, floor_z)
+    if OBJECTS_CONFIG.exists() and conv["lines"]:
+        data = json.loads(OBJECTS_CONFIG.read_text(encoding="utf-8"))
+        for i, line in enumerate(conv["lines"]):
+            for k in line["object_index"]:
+                if k < len(data["objects"]):
+                    data["objects"][k]["conveyor"] = i
+            line["objects"] = [data["objects"][k]["name"] for k in line["object_index"] if k < len(data["objects"])]
+        data["conveyors"] = conv["lines"]
+        OBJECTS_CONFIG.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return conv["lines"], checks
+
+
+def _build_conveyor_graph(stage, lines):
+    """Node IsaacConveyor cho moi bang (van toc be mat + cuon texture); khong co node -> PhysxSurfaceVelocityAPI."""
+    keys = og.Controller.Keys
+    try:
+        nodes = [("OnPlaybackTick", "omni.graph.action.OnPlaybackTick")]
+        nodes += [(f"Conveyor_{line['name']}", f"{CONVEYOR_EXT}.IsaacConveyor") for line in lines]
+        values, connect = [], []
+        for line in lines:
+            n = f"Conveyor_{line['name']}"
+            values += [(f"{n}.inputs:velocity", float(line["speed_mps"])), (f"{n}.inputs:direction", [1.0, 0.0, 0.0]),
+                       (f"{n}.inputs:animateTexture", True)]
+            connect += [("OnPlaybackTick.outputs:tick", f"{n}.inputs:onStep"),
+                        ("OnPlaybackTick.outputs:deltaSeconds", f"{n}.inputs:delta")]
+        og.Controller.edit({"graph_path": "/Conveyors/Graph", "evaluator_name": "execution"},
+                           {keys.CREATE_NODES: nodes, keys.SET_VALUES: values, keys.CONNECT: connect})
+        for line in lines:
+            node = stage.GetPrimAtPath(f"/Conveyors/Graph/Conveyor_{line['name']}")
+            node.CreateRelationship("inputs:conveyorPrim").SetTargets([Sdf.Path(line["belt_prim"])])
+        return [(True, f"bang chuyen: node {CONVEYOR_EXT}.IsaacConveyor x{len(lines)}, {lines[0]['speed_mps']} m/s, cuon texture")]
+    except Exception as exc:  # noqa: BLE001
+        log(f"khong tao duoc node IsaacConveyor ({exc}) -> dung PhysxSurfaceVelocityAPI")
+        if stage.GetPrimAtPath("/Conveyors/Graph"):
+            stage.RemovePrim("/Conveyors/Graph")
+        for line in lines:
+            cl.apply_surface_velocity(stage, line["belt_prim"], float(line["speed_mps"]))
+        return [(True, f"bang chuyen: PhysxSurfaceVelocityAPI x{len(lines)}, {lines[0]['speed_mps']} m/s (khong cuon texture)")]
+
+
 def _build_camera_graph(camera_path, graph="/ROS2/Camera", width=CAM_W, height=CAM_H, helpers=None):
     keys = og.Controller.Keys
     helpers = helpers or [
@@ -613,6 +665,15 @@ async def build():
         obj_paths, ochecks = _add_hope_objects(stage, robot_pos, top, rng)
         checks += ochecks
         extra_tf += obj_paths
+    conveyor_lines = []
+    if top is not None and CONVEYORS:
+        try:
+            ext_mgr.set_extension_enabled_immediate(CONVEYOR_EXT, True)
+        except Exception as exc:  # noqa: BLE001
+            log(f"khong bat duoc {CONVEYOR_EXT}: {exc}")
+        conveyor_lines, vchecks = _add_conveyors(stage, robot_pos, top, rng)
+        checks += vchecks
+        await _frames(5)
     cfg = _write_gripper_config(stage, gripper_info, str(wrist3.GetPath()) if not full_robot and wrist3 else "")
     log(f"Ghi {GRIPPER_CONFIG.name}: gripper={cfg['gripper']} tcp={cfg.get('tcp_offset_m')} commit={cfg.get('asset_commit')}")
 
@@ -621,6 +682,8 @@ async def build():
     demo_cam = _add_demo_camera(stage) if DEMO_CAM else None
     if demo_cam:
         checks += _set_camera_rate(stage, demo_cam)
+    if conveyor_lines:
+        checks += _build_conveyor_graph(stage, conveyor_lines)
 
     for ok, msg in checks:
         log(f"CHECK {'PASS' if ok else 'FAIL'} {msg}")
@@ -642,7 +705,8 @@ async def build():
     try:
         from isaacsim.core.rendering_manager import ViewportManager
 
-        ViewportManager.set_camera_view("/OmniverseKit_Persp", eye=[0.9, 1.1, 1.45], target=[-0.25, 0.0, 0.85])
+        eye, target = (DEMO_CAM_EYE, DEMO_CAM_TARGET) if CONVEYORS else ((0.9, 1.1, 1.45), (-0.25, 0.0, 0.85))
+        ViewportManager.set_camera_view("/OmniverseKit_Persp", eye=list(eye), target=list(target))
     except Exception as exc:  # noqa: BLE001
         log(f"khong dat duoc goc nhin viewport: {exc}")
 
