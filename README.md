@@ -6,6 +6,7 @@ Demo cánh tay UR5e gắn tay gắp 2 ngón Robotiq 2F-85 trong NVIDIA Isaac Sim
 - **IK của UR5e**: giải tích (8 nghiệm) cho MoveJ, damped least-squares cho MoveL/jog (ổn định gần điểm kỳ dị).
 - **Gripper Robotiq 2F-85** (asset chính thức của Robotiq, PhysX `parallel_grip`), tự kiểm tra cấu hình khi dựng scene.
 - **Demo gắp**: gắp – nâng – đặt khối lập phương, và pick & place 5 vật thật từ bộ dữ liệu [BOP HOPE](https://bop.felk.cvut.cz/datasets/).
+- **Băng chuyền**: 2 băng chuyền NVIDIA sau robot, cao ngang mặt bàn. Robot thả vật 1–2 lên băng 1 và vật 3–5 lên băng 2, băng đưa vật rơi vào thùng KLT ở cuối (xem [chi tiết](ur5e_ros/README.md#băng-chuyền-và-thùng-isaacconveyor_linepy)).
 
 ![Isaac Sim](https://img.shields.io/badge/Isaac%20Sim-6.0.1-76b900) ![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy-22314e) ![Platform](https://img.shields.io/badge/Windows-11-0078d4)
 
@@ -82,6 +83,7 @@ bash ur5e_ros/linux/record_demo.sh                   # chạy pick & place + qua
 | Pick & place 5 vật HOPE (Windows, RTX 5090) | **4/5**. Butter 0.5 mm, Pudding 1.2 mm, GreenBeans 0.2 mm, Raisins 17.5 mm |
 | Pick & place 5 vật HOPE (server Linux headless, chờ theo thời gian sim) | **5/5**. Lệch 1 / 1 / 1 / 4 / 14 mm, nghiêng ≤ 1° |
 | Pick & place 5 chi tiết cơ khí ITODD (server Linux headless) | **5/5**. Lệch 0.6–2.5 mm, nghiêng 0° |
+| Gắp 5 chi tiết ITODD → 2 băng chuyền → thùng KLT (server Linux headless) | **5/5** vào đúng thùng. Băng đo được −0.120 m/s |
 
 ### Bộ chi tiết cơ khí (BOP ITODD)
 

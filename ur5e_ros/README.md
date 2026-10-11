@@ -146,6 +146,21 @@ Mặc định scene (`UR5E_OBJECTS=hope`) xếp 5 vật thành hàng ở x = 0.5
 
 Kết quả: 4/5 vật đạt (lệch 0.2–17.5 mm). Yogurt là cốc thuôn nên bị lật trong tay gắp song song (xem README gốc).
 
+### Băng chuyền và thùng (`isaac/conveyor_line.py`)
+
+Với bộ vật BOP, scene mặc định thêm 2 băng chuyền phía sau robot. Mỗi băng chạy ra xa bàn và có thùng KLT ở cuối. Đặt `UR5E_CONVEYORS=0` để quay lại kiểu xếp hàng trên bàn.
+
+| | Băng 1 (y = −0.33 m) | Băng 2 (y = +0.33 m) |
+|---|---|---|
+| Vật | 1, 2 (HexBolt, SteppedPin) | 3, 4, 5 (PipeTee, ClampBlock, SlottedClamp) |
+
+- **Băng chuyền**: asset NVIDIA `ConveyorBelt_A06`, thu nhỏ đều ×0.428 để mặt băng ngang mặt bàn (0.762 m). Băng dài 0.86 m, rộng 0.39 m.
+- **Chuyển động**: mặt băng là rigid body kinematic, đặt `PhysxSurfaceVelocityAPI` theo hệ thế giới (−0.12 m/s theo X). Node `IsaacConveyor` (`UR5E_CONVEYOR_MODE=node`) cuộn được texture, nhưng với băng đã xoay và thu nhỏ thì kéo vật sai chiều hoặc gần như không kéo.
+- **Thùng**: KLT nhỏ 20 × 30 cm, cố định (kinematic), đặt trên bệ sao cho miệng thùng thấp hơn mặt băng 4 cm.
+- **Tự kiểm tra**: sau khi bấm Play, scene thả một khối 4 cm lên mỗi băng, đo vận tốc thực rồi xóa khối, và in `CONVEYOR TEST OK`. Chờ dòng này rồi mới chạy demo.
+- **Demo**: robot thả vật cách mặt băng 1 cm, cạnh hẹp nằm ngang băng để vật không đổ. Khi xoay ra sau, robot chạy chậm (hệ số tốc độ 0.15) để vật nặng không trượt khỏi ngón. Cuối demo, chương trình kiểm tra qua `/tf` rằng từng vật nằm trong đúng thùng.
+- **Kết quả (server Linux, ITODD)**: **5/5** vật vào đúng thùng. Tự kiểm tra đo được −0.120 m/s ở cả hai băng.
+
 ## Lỗi thường gặp
 
 | Hiện tượng | Cách xử lý |
