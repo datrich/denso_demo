@@ -6,7 +6,9 @@ set -eo pipefail  # khong dung -u: setup.bash cua ROS tham chieu bien chua dat
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 export UR5E_DEMO_CAM="${UR5E_DEMO_CAM:-1}"
-export CUDA_VISIBLE_DEVICES="$GPU"
+# KHONG dat CUDA_VISIBLE_DEVICES: RTX renderer phai ghep GPU Vulkan voi GPU CUDA cung chi so,
+# che bot CUDA se loi "No device could be created". Chon GPU bang activeGpu / cudaDevice.
+unset CUDA_VISIBLE_DEVICES
 # Thu muc cau hinh / cache / log rieng cho Kit (khong dung chung voi Isaac Sim cua nguoi khac)
 PORTABLE="${ISAAC_PORTABLE_ROOT:-$REPO/.isaac_portable}"
 mkdir -p "$PORTABLE" "$REPO/logs"
@@ -20,6 +22,6 @@ echo "Isaac Sim headless: GPU $GPU, log $LOG"
 cd "$ISAAC_ROOT"
 nice -n "${NICE:-10}" ./isaac-sim.sh --no-window \
     --portable-root "$PORTABLE" \
-    --/renderer/multiGpu/enabled=false --/renderer/activeGpu=0 \
+    --/renderer/multiGpu/enabled=false --/renderer/activeGpu="$GPU" --/physics/cudaDevice="$GPU" \
     --/isaac/startup/ros_bridge_extension=isaacsim.ros2.bridge \
     --exec "$REPO_ROS/isaac/ur5e_scene.py" "$@" 2>&1 | tee "$LOG"
