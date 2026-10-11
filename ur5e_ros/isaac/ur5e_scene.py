@@ -27,6 +27,7 @@ Bien moi truong tuy chon:
     UR5E_GRIPPER=none    khong gan 2F-85 (mac dinh: 2f85)
     UR5E_ROBOTIQ_ASSETS  thu muc clone robotiq/isaacsim_assets (mac dinh ../robotiq_isaacsim_assets)
     UR5E_OBJECTS=cube    dung khoi lap phuong thay cho 5 vat BOP HOPE (mac dinh: hope)
+    UR5E_HIDE_PRIMS      prim cua scene goc can an, phan cach dau phay (mac dinh: chai trang; "" = giu)
 """
 
 import asyncio
@@ -70,6 +71,9 @@ DEMO_CAM_PATH = "/DemoCamera"
 DEMO_CAM_W, DEMO_CAM_H = 1280, 720
 DEMO_CAM_EYE = (0.95, 1.05, 1.40)       # toa do the gioi (m)
 DEMO_CAM_TARGET = (-0.05, -0.08, 0.80)  # giua ban, hang vat gap / dat
+
+# Prim cua scene goc can an (phan cach bang dau phay); "" = giu nguyen. Mac dinh bo chai trang tren ban.
+HIDE_PRIMS = os.environ.get("UR5E_HIDE_PRIMS", "/NaturalBostonRoundBottle_A01_PR_NVD_01")
 
 # Vat tren ban: "hope" = 5 vat BOP HOPE (tools/bop_to_usd.py), "cube" = khoi lap phuong thu
 OBJECTS = os.environ.get("UR5E_OBJECTS", "hope").strip().lower()
@@ -562,6 +566,12 @@ async def build():
         camera_path = _add_temp_d435(stage, str(wrist3.GetPath())) if wrist3 else None
 
     checks = []
+    # an bot vat trong scene goc (mac dinh: chai trang) - chi tat o layer tam, file goc khong doi
+    for path in [p.strip() for p in HIDE_PRIMS.split(",") if p.strip()]:
+        prim = stage.GetPrimAtPath(path)
+        if prim:
+            prim.SetActive(False)
+            checks.append((not stage.GetPrimAtPath(path).IsActive(), f"an {path} (UR5E_HIDE_PRIMS)"))
     gripper_info = None
     if not full_robot and GRIPPER == "2f85" and wrist3 is not None:
         gripper_info, gchecks = _setup_2f85(stage, robot_root, str(wrist3.GetPath()))
