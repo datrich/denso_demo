@@ -52,15 +52,20 @@ def object_points_local(sim, name):
     root_path = re.sub(r"env_(\[\^/\]\+|\.\*)", "env_0", root_path)  # regex prim cua Isaac Lab -> env 0
     root = stage.GetPrimAtPath(root_path)
     assert root, f"khong tim thay prim {root_path}"
+    from demodiffusion.franka_kinematics import orthonormalize
+
     cache = UsdGeom.XformCache(Usd.TimeCode.Default())
-    T_root_inv = np.linalg.inv(np.array(cache.GetLocalToWorldTransform(root)).T)
+    # Chi khu phan quay + tinh tien cua prim goc (tu the cua vat), GIU ti le (asset theo cm co scale 0.01 o goc)
+    M_root = np.array(cache.GetLocalToWorldTransform(root)).T
+    R_root, t_root = orthonormalize(M_root[:3, :3]), M_root[:3, 3]
     pts = []
     for p in Usd.PrimRange(root, Usd.TraverseInstanceProxies()):
         if p.IsA(UsdGeom.Mesh):
             P = np.array(UsdGeom.Mesh(p).GetPointsAttr().Get() or [], float)
             if len(P):
-                M = T_root_inv @ np.array(cache.GetLocalToWorldTransform(p)).T
-                pts.append(P @ M[:3, :3].T + M[:3, 3])
+                M = np.array(cache.GetLocalToWorldTransform(p)).T
+                Pw = P @ M[:3, :3].T + M[:3, 3]
+                pts.append((Pw - t_root) @ R_root)
     assert pts, f"vat {name} khong co mesh"
     return np.vstack(pts)
 
