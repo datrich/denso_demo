@@ -109,6 +109,7 @@ class PickPlaceExpert:
                 best = (ep + 0.05 * er, R, ep, er)
         _, R, ep, er = best
         print(f"DBG IK tu the kep: lech {ep * 1000:.1f} mm, {np.degrees(er):.1f} deg", flush=True)
+        np.savez("/tmp/dd_ik_case.npz", q_rest=self.q_rest, T_tool=self.kin.T_tool, R=R, g=g, T_bw=self.T_bw, T0=self.T0)
         return g, R, top, P[:, 2].min()
 
     def plan(self):
