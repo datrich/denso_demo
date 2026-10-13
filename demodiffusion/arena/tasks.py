@@ -101,7 +101,8 @@ class PickPlaceExpert:
         else:
             sl = P[mid]
             g = np.r_[sl[:, :2].mean(0), 0.5 * (sl[:, 2].min() + sl[:, 2].max())]
-            g[2] = max(g[2], top - 0.025)                              # vat cao: kep phan tren
+            # kep o tam lat cat giua than (vat cao nhu tuong do choi: khong kep dau/duoi manh o dinh)
+            g[2] = np.clip(g[2], P[:, 2].min() + 0.015, top - 0.015)
             close_ax = np.cross([0, 0, 1.0], long_ax)                  # vuong goc truc dai, nam ngang
         approach = np.array([0, 0, -1.0])
         y0 = close_ax / np.linalg.norm(close_ax)
