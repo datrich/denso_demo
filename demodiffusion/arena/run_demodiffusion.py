@@ -37,6 +37,7 @@ from isaaclab_arena.utils.isaaclab_utils.simulation_app import SimulationAppCont
 
 CONTROL_HZ = 15
 H, OPEN_LOOP = 10, 8          # pi0 chunk 10, chay ho mach 8 (bang V cua bai bao)
+GRACE_STEPS = 2 * CONTROL_HZ  # demo dung ngay luc thanh cong -> cho them 2 s de Arena xac nhan (vat nam yen tren dich)
 
 
 def parse():
@@ -260,11 +261,16 @@ def run_eval(args, env, task):
             calibrate(sim, kin)
             q_rest = TASKS[task].get("q_rest", sim.q())
             q_ret, g_ret, _, ik_err = retarget_to_joints(kps, kin, sim.q(), q_rest)
+            pick = TASKS[task]["pick"]
+            p_obj = (np.linalg.inv(sim.T_world_base()) @ sim.obj_T(pick))[:3, 3]
+            p_demo = np.array(json.loads(str(demo["scene"]))[pick])[:3, 3]
+            print(f"EP {method} ep{ep}: {pick} tai {p_obj.round(3)} (lech so voi canh demo "
+                  f"{np.linalg.norm(p_obj[:2] - p_demo[:2]) * 100:.1f} cm)", flush=True)
             video = VideoWriter(out / f"{task}_{method}_ep{ep}.mp4", args.ffmpeg) if ep < args.video else None
             chunk, k_in_chunk, success, t_success = None, OPEN_LOOP, False, None
-            for t in range(T_steps):
+            for t in range(T_steps + GRACE_STEPS):  # them 2 s sau demo de vat on dinh (dieu kien thanh cong)
                 if method == "kinematic":
-                    a = np.r_[q_ret[t], g_ret[t]]
+                    a = np.r_[q_ret[min(t, T_steps - 1)], g_ret[min(t, T_steps - 1)]]
                 else:
                     if k_in_chunk >= OPEN_LOOP:
                         po = obs["policy"]
