@@ -45,8 +45,11 @@ def object_points_local(sim, name):
     import omni.usd
     from pxr import Usd, UsdGeom
 
+    import re
+
     stage = omni.usd.get_context().get_stage()
-    root_path = sim.env.scene[name].cfg.prim_path.replace("{ENV_REGEX_NS}", "/World/envs/env_0").replace(".*", "0")
+    root_path = sim.env.scene[name].cfg.prim_path.replace("{ENV_REGEX_NS}", "/World/envs/env_0")
+    root_path = re.sub(r"env_(\[\^/\]\+|\.\*)", "env_0", root_path)  # regex prim cua Isaac Lab -> env 0
     root = stage.GetPrimAtPath(root_path)
     assert root, f"khong tim thay prim {root_path}"
     cache = UsdGeom.XformCache(Usd.TimeCode.Default())
