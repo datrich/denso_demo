@@ -11,8 +11,8 @@ Hai che do (chay bang python cua venv Arena, server openpi phai dang chay neu du
               demodiffusion : khu nhieu quy dao retarget tu s* (mac dinh 0.2 va 0.4)
             Do dai episode = do dai demo (nhu bai bao). Ghi video camera + results.json.
 
-    python demodiffusion/arena/run_demodiffusion.py --mode record --task banana_on_plate --env_spec <yaml> --headless
-    python demodiffusion/arena/run_demodiffusion.py --mode eval --task banana_on_plate --env_spec <yaml> --headless \
+    python demodiffusion/arena/run_demodiffusion.py --mode record --task banana_on_plate --env_spec <yaml>
+    python demodiffusion/arena/run_demodiffusion.py --mode eval --task banana_on_plate --env_spec <yaml> \
         --methods pi0 kinematic dd0.2 dd0.4 --episodes 10
 """
 
