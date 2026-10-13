@@ -75,11 +75,19 @@ def pose(R, p):
 
 
 def rot_err(R_goal, R):
+    """Vector quay (khung the gioi) dua R ve R_goal. Goc tinh bang atan2(|phan phan doi xung|, (trace-1)/2):
+    on dinh ca khi goc rat nho (Jacobian sai phan 1e-6) va khi ma tran lech truc chuan chut it (du lieu float32)."""
     Re = R_goal @ R.T
-    ang = np.arccos(np.clip((np.trace(Re) - 1) / 2, -1, 1))
-    if ang < 1e-9:
-        return np.zeros(3)
-    return ang / (2 * np.sin(ang)) * np.array([Re[2, 1] - Re[1, 2], Re[0, 2] - Re[2, 0], Re[1, 0] - Re[0, 1]])
+    v = 0.5 * np.array([Re[2, 1] - Re[1, 2], Re[0, 2] - Re[2, 0], Re[1, 0] - Re[0, 1]])
+    s = np.linalg.norm(v)
+    if s < 1e-12:
+        return v
+    return v * (np.arctan2(s, 0.5 * (np.trace(Re) - 1)) / s)
+
+
+def orthonormalize(R):
+    U, _, Vt = np.linalg.svd(R)
+    return U @ np.diag([1, 1, np.linalg.det(U @ Vt)]) @ Vt
 
 
 class FrankaKinematics:
@@ -90,7 +98,9 @@ class FrankaKinematics:
 
     def calibrate_tool(self, q, T_base_ee):
         """T_tool = inv(FK_link8(q)) @ T_base_ee, voi T_base_ee do tu mo phong o cung cau hinh q."""
-        self.T_tool = np.linalg.inv(fk_link8(q)) @ T_base_ee
+        T = np.linalg.inv(fk_link8(np.asarray(q, float))) @ np.asarray(T_base_ee, float)
+        T[:3, :3] = orthonormalize(T[:3, :3])  # du lieu sim float32 -> lam tron ve ma tran quay dung
+        self.T_tool = T
         return self.T_tool
 
     def fk(self, q):

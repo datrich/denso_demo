@@ -18,4 +18,4 @@ export FFMPEG="$($PY -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_
 echo "task=$TASK mode=$MODE env=$ENV_SPEC GPU=$GPU_ID out=$OUT"
 exec nice -n "${NICE:-10}" "$PY" "$REPO/demodiffusion/arena/run_demodiffusion.py" --mode "$MODE" --task "$TASK" \
     --env_spec "$ENV_SPEC" --device "cuda:$GPU_ID" --out "$OUT" --ffmpeg "$FFMPEG" \
-    --policy_port "${PORT:-8000}" "$@"
+    --policy_port "${PORT:-8000}" --seed "${SEED:-$([ "$MODE" = record ] && echo 0 || echo 100)}" "$@"
