@@ -8,7 +8,7 @@ mkdir -p "$DST"
 FF="$("$WS/IsaacLab-Arena/.venv/bin/python" -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')"
 for D in "$WS"/results/*/; do
     task=$(basename "$D"); task=${task%_clean}
-    cp "$D"/results_*.json "$DST/" 2>/dev/null || true
+    for j in "$D"/results_*.json; do [ -f "$j" ] && cp "$j" "$DST/$(basename "$D")_$(basename "$j")"; done
     for f in "$D"/demo_*_expert.mp4; do [ -f "$f" ] && cp "$f" "$DST/$(basename "$D")_$(basename "$f")"; done
     for ep in 0 1; do
         V=(); L=()
