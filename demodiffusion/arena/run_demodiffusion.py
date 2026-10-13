@@ -190,8 +190,12 @@ def run_record(args, env, task):
             tcp_arena = sim.tcp_world()
             tcp_mine = (sim.T_world_ee() @ np.r_[0.131, 0, 0, 1])[:3]
             o = sim.obj_T(expert.object_names[0])[:3, 3]
+            from demodiffusion.franka_kinematics import rot_err
+
             print(f"DBG t={step:3d} grip={grip:.0f} gpos={float(obs['policy']['gripper_pos'][0, 0]):.2f} "
-                  f"lech dat {np.linalg.norm(T_act[:3, 3] - T_goal_b[:3, 3]) * 1000:5.1f} mm IK {ep * 1000:4.1f} mm | "
+                  f"lech dat {np.linalg.norm(T_act[:3, 3] - T_goal_b[:3, 3]) * 1000:5.1f} mm "
+                  f"{np.degrees(np.linalg.norm(rot_err(T_goal_b[:3, :3], T_act[:3, :3]))):4.1f} deg "
+                  f"IK {ep * 1000:4.1f} mm {np.degrees(er):4.1f} deg | "
                   f"TCP arena {tcp_arena.round(3)} cua minh {tcp_mine.round(3)} | vat {o.round(3)}", flush=True)
         video.add(camera_frame(obs, f"expert demo t={step / CONTROL_HZ:4.1f}s"))
         if sim.term("success"):

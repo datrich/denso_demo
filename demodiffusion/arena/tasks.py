@@ -99,10 +99,16 @@ class PickPlaceExpert:
             g[2] = max(g[2], top - 0.025)                              # vat cao: kep phan tren
             close_ax = np.cross([0, 0, 1.0], long_ax)                  # vuong goc truc dai, nam ngang
         approach = np.array([0, 0, -1.0])
-        y = close_ax / np.linalg.norm(close_ax)
-        if y @ self.T0[:3, 1] < 0:                                     # gripper doi xung -> it xoay co tay nhat
-            y = -y
-        R = np.column_stack([approach, y, np.cross(approach, y)])
+        y0 = close_ax / np.linalg.norm(close_ax)
+        # gripper doi xung (y hoac -y deu kep duoc) -> chon chieu IK dat huong tot nhat (khop 7 gioi han +-166 deg)
+        best = None
+        for y in (y0, -y0):
+            R = np.column_stack([approach, y, np.cross(approach, y)])
+            q, ep, er = self.kin.ik(pose(R, g - TCP_OFFSET * approach), self.q_rest, iters=200, null_q=self.q_rest)
+            if best is None or ep + 0.05 * er < best[0]:
+                best = (ep + 0.05 * er, R, ep, er)
+        _, R, ep, er = best
+        print(f"DBG IK tu the kep: lech {ep * 1000:.1f} mm, {np.degrees(er):.1f} deg", flush=True)
         return g, R, top, P[:, 2].min()
 
     def plan(self):
