@@ -303,8 +303,11 @@ def run_eval(args, env, task):
     client = None
     if any(m != "kinematic" for m in args.methods):
         client = WebsocketClientPolicy(host=args.policy_host, port=args.policy_port)
+    res_path = out / f"results_{task}.json"
+    old = json.loads(res_path.read_text()) if res_path.exists() else {}
     results = {"task": task, "prompt": prompt, "demo_steps": T_steps, "human_noise": str(demo["human_noise"]),
-               "methods": {}}
+               "var_radius_m": args.var_radius, "var_yaw_deg": args.var_yaw, "episodes": args.episodes,
+               "methods": old.get("methods", {})}  # gop voi ket qua cu (chay lai tung phuong phap duoc)
     for method in args.methods:
         s_star = {"pi0": 1.0, "kinematic": 0.0}.get(method)
         if s_star is None:
@@ -372,7 +375,7 @@ def run_eval(args, env, task):
         rate = float(np.mean(succ)) * 100
         results["methods"][method] = {"s_star": s_star, "success": succ, "success_rate": rate}
         print(f"RESULT {task} {method}: {sum(succ)}/{len(succ)} = {rate:.0f}%", flush=True)
-        (out / f"results_{task}.json").write_text(json.dumps(results, indent=2))
+        res_path.write_text(json.dumps(results, indent=2))
 
 
 def main():

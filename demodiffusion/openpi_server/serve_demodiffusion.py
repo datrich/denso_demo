@@ -59,8 +59,8 @@ class DemoDiffusionPolicy:
         s = float(np.clip(obs.pop("time", 1.0), 0.0, 1.0))
         p = self._p
         inputs = dict(obs)
-        if retarget is not None:
-            inputs["actions"] = np.asarray(retarget, np.float32)
+        if retarget is not None:  # mang tu msgpack la chi-doc; DeltaActions tru tai cho -> phai sao chep
+            inputs["actions"] = np.array(retarget, dtype=np.float32, copy=True)
         inputs = p._input_transform(inputs)  # noqa: SLF001  (DroidInputs -> DeltaActions -> Normalize -> Pad)
         a_norm = inputs.pop("actions", None)
         batch = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
