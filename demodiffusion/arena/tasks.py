@@ -107,6 +107,9 @@ class PickPlaceExpert:
 
     def plan(self):
         g, R, top, bottom = self._grasp()
+        T_wb = np.linalg.inv(self.T_bw)
+        print(f"DBG diem kep (the gioi) {(T_wb @ np.r_[g, 1])[:3].round(3)}, vat cao {top - bottom:.3f} m, "
+              f"phuong kep {(T_wb[:3, :3] @ R[:, 1]).round(2)}", flush=True)
         D = self._world_pts(self.cfg["place"])
         dst = np.r_[D[:, :2].mean(0), D[:, 2].max()]
         lift_z = max(top, dst[2]) + 0.15

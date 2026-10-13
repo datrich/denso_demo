@@ -53,6 +53,7 @@ def parse():
     p.add_argument("--policy_port", type=int, default=8000)
     p.add_argument("--video", type=int, default=3, help="so episode dau moi phuong phap duoc ghi video")
     p.add_argument("--ffmpeg", default=os.environ.get("FFMPEG", "ffmpeg"))
+    p.add_argument("--debug", action="store_true")
     return p
 
 
@@ -96,6 +97,13 @@ class SimHandle:
     def obj_T(self, name):
         o = self.env.scene[name]
         return T_from_pq(self._t(o.data.root_pos_w), self._t(o.data.root_quat_w))
+
+    def tcp_world(self):
+        """Diem kep ma Arena dinh nghia (ee_frame/end_effector = base_link + 0.131 x)."""
+        try:
+            return self._t(self.env.scene["ee_frame"].data.target_pos_w)[0]
+        except Exception:  # noqa: BLE001
+            return np.full(3, np.nan)
 
     def term(self, name):
         tm = self.env.termination_manager
@@ -165,6 +173,10 @@ def run_record(args, env, task):
     video = VideoWriter(out / f"demo_{task}_expert.mp4", args.ffmpeg)
     ee_traj, grip_traj, q = [], [], sim.q()
     success, step = False, 0
+    T_e = sim.T_world_ee()
+    print(f"DBG base_link (the gioi): x={T_e[:3, 0].round(3)} y={T_e[:3, 1].round(3)} z={T_e[:3, 2].round(3)} "
+          f"p={T_e[:3, 3].round(3)} | FK sau hieu chinh lech "
+          f"{np.linalg.norm((T_wb @ kin.fk(sim.q()))[:3, 3] - T_e[:3, 3]) * 1000:.2f} mm", flush=True)
     for step, (T_goal_b, grip) in enumerate(expert.plan()):
         q, ep, er = kin.ik(T_goal_b, q, null_q=expert.q_rest)
         import torch
@@ -173,6 +185,14 @@ def run_record(args, env, task):
         obs, _, terminated, truncated, _ = env.step(act)
         ee_traj.append(T_bw @ sim.T_world_ee())     # tu the base_link THUC (khung goc robot)
         grip_traj.append(float(grip))
+        if args.debug and step % 10 == 0:
+            T_act = T_bw @ sim.T_world_ee()
+            tcp_arena = sim.tcp_world()
+            tcp_mine = (sim.T_world_ee() @ np.r_[0.131, 0, 0, 1])[:3]
+            o = sim.obj_T(expert.object_names[0])[:3, 3]
+            print(f"DBG t={step:3d} grip={grip:.0f} gpos={float(obs['policy']['gripper_pos'][0, 0]):.2f} "
+                  f"lech dat {np.linalg.norm(T_act[:3, 3] - T_goal_b[:3, 3]) * 1000:5.1f} mm IK {ep * 1000:4.1f} mm | "
+                  f"TCP arena {tcp_arena.round(3)} cua minh {tcp_mine.round(3)} | vat {o.round(3)}", flush=True)
         video.add(camera_frame(obs, f"expert demo t={step / CONTROL_HZ:4.1f}s"))
         if sim.term("success"):
             success = True
