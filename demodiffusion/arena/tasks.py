@@ -131,15 +131,20 @@ class PickPlaceExpert:
 
         # day vat cach mat dich place_lift: diem kep = dst_top + place_lift + (diem kep - day vat)
         place_g = np.r_[dst[:2], dst[2] + self.cfg.get("place_lift", 0.04) + (g[2] - bottom)]
+        # Nhip thoi gian kieu nguoi: dung lai truoc khi nam / nha va giu tay khi nam / nha. Can thiet vi retarget
+        # cua tac gia loc EMA alpha=0.1 (hang so thoi gian ~0.67 s o 15 Hz): khong dung lai thi tay kep dong khi
+        # con o cao va lenh nha bi loc mat.
         waypoints = [  # (diem kep dich, gripper, thoi gian s)
             (np.r_[g[:2], lift_z], 0, 2.5),
-            (g, 0, 1.6),
-            (g, 1, 0.8),
-            (np.r_[g[:2], lift_z], 1, 1.5),
+            (g, 0, 2.0),
+            (g, 0, 0.6),       # dung lai tren vat
+            (g, 1, 1.5),       # nam va giu
+            (np.r_[g[:2], lift_z], 1, 1.6),
             (np.r_[dst[:2], lift_z], 1, 2.2),
-            (place_g, 1, 1.4),
-            (place_g, 0, 0.8),
-            (np.r_[dst[:2], lift_z], 0, 1.2),
+            (place_g, 1, 1.6),
+            (place_g, 1, 0.5),  # dung lai truoc khi nha
+            (place_g, 0, 1.5),  # nha va giu
+            (np.r_[dst[:2], lift_z], 0, 1.5),
         ]
         p_prev, R_prev, first = self.T0[:3, 3], self.T0[:3, :3], True
         for p_g, grip, dur in waypoints:

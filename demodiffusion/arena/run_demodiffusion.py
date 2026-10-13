@@ -238,7 +238,8 @@ def run_record(args, env, task):
     print(f"DBG base_link (the gioi): x={T_e[:3, 0].round(3)} y={T_e[:3, 1].round(3)} z={T_e[:3, 2].round(3)} "
           f"p={T_e[:3, 3].round(3)} | FK sau hieu chinh lech "
           f"{np.linalg.norm((T_wb @ kin.fk(sim.q()))[:3, 3] - T_e[:3, 3]) * 1000:.2f} mm", flush=True)
-    for step, (T_goal_b, grip) in enumerate(expert.plan()):
+    plan = list(expert.plan())
+    for step, (T_goal_b, grip) in enumerate(plan):
         q, ep, er = kin.ik(T_goal_b, q, null_q=expert.q_rest)
         import torch
 
@@ -264,7 +265,14 @@ def run_record(args, env, task):
         if bool(terminated[0]) or bool(truncated[0]):
             break
     video.close()
+    n_sim = len(ee_traj)
+    # Arena ket thuc episode ngay khi thanh cong (vat vua nam yen tren dich) -> noi phan con lai cua ke hoach
+    # (nha vat, rut tay) + 1 s dung yen de demo nguoi tron ven nhu nguoi that.
+    for T_goal_b, grip in plan[n_sim:] + [plan[-1]] * CONTROL_HZ:
+        ee_traj.append(T_goal_b)
+        grip_traj.append(float(grip))
     ee_traj, grip_traj = np.array(ee_traj), np.array(grip_traj)
+    print(f"Demo: {n_sim} buoc mo phong + {len(ee_traj) - n_sim} buoc noi tu ke hoach", flush=True)
     kps = synthesize_hand(ee_traj, grip_traj, rng=args.demo_seed, noise=args.human_noise)
     np.savez(out / f"demo_{task}.npz", keypoints=kps, ee_traj=ee_traj, grip=grip_traj, T_world_base=T_wb,
              expert_success=success, human_noise=args.human_noise, demo_seed=args.demo_seed,
