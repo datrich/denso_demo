@@ -174,6 +174,9 @@ def run_record(args, env, task):
     ee_traj, grip_traj, q = [], [], sim.q()
     success, step = False, 0
     T_e = sim.T_world_ee()
+    raw = sim._t(sim.robot.data.body_quat_w)
+    print(f"DBG quat tho: panda_link0 {raw[sim.i_link0].round(4)} base_link {raw[sim.i_ee].round(4)}; "
+          f"root {sim._t(sim.robot.data.root_quat_w).round(4)}; T_tool R=\n{kin.T_tool[:3, :3].round(3)}", flush=True)
     print(f"DBG base_link (the gioi): x={T_e[:3, 0].round(3)} y={T_e[:3, 1].round(3)} z={T_e[:3, 2].round(3)} "
           f"p={T_e[:3, 3].round(3)} | FK sau hieu chinh lech "
           f"{np.linalg.norm((T_wb @ kin.fk(sim.q()))[:3, 3] - T_e[:3, 3]) * 1000:.2f} mm", flush=True)
