@@ -55,6 +55,9 @@ def parse():
     p.add_argument("--video", type=int, default=3, help="so episode dau moi phuong phap duoc ghi video")
     p.add_argument("--ffmpeg", default=os.environ.get("FFMPEG", "ffmpeg"))
     p.add_argument("--debug", action="store_true")
+    p.add_argument("--var_radius", type=float, default=0.04,
+                   help="m; xe dich vat can gap quanh vi tri demo (bai bao: trong vung dan bang keo). <0 = dung canh Arena")
+    p.add_argument("--var_yaw", type=float, default=20.0, help="deg; xoay vat can gap +-")
     return p
 
 
@@ -109,6 +112,57 @@ class SimHandle:
     def term(self, name):
         tm = self.env.termination_manager
         return bool(tm.get_term(name)[0]) if name in tm.active_terms else False
+
+    # ---- canh: luu / dat tu the vat (the gioi, quaternion xyzw nhu Isaac Lab 3)
+    def rigid_names(self):
+        return list(self.env.scene.rigid_objects.keys())
+
+    def raw_pose(self, name):
+        o = self.env.scene[name]
+        return np.r_[self._t(o.data.root_pos_w), self._t(o.data.root_quat_w)]
+
+    def set_pose(self, name, pose7):
+        import torch
+
+        o = self.env.scene[name]
+        dev = self.env.device
+        o.write_root_pose_to_sim_index(root_pose=torch.tensor([pose7], dtype=torch.float32, device=dev),
+                                       env_ids=torch.tensor([0], dtype=torch.int64, device=dev))
+        o.write_root_velocity_to_sim_index(root_velocity=torch.zeros((1, 6), dtype=torch.float32, device=dev),
+                                           env_ids=torch.tensor([0], dtype=torch.int64, device=dev))
+
+
+def _quat_mul_xyzw(a, b):
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return np.array([aw * bx + ax * bw + ay * bz - az * by, aw * by - ax * bz + ay * bw + az * bx,
+                     aw * bz + ax * by - ay * bx + az * bw, aw * bw - ax * bx - ay * by - az * bz])
+
+
+def set_test_scene(env, sim, scene_raw, pick, seed, radius, yaw_deg, settle_steps=8):
+    """Dat lai canh nhu luc demo, roi xe dich vat can gap (dia ban kinh `radius`, xoay +-yaw_deg) - nhu bai bao:
+    vat dich duoc dat ngau nhien trong vung dan bang keo quanh vi tri luc demo; cung bien the cho moi phuong phap."""
+    import torch
+
+    rng = np.random.default_rng(seed)
+    for name, pose7 in scene_raw.items():
+        if name in sim.rigid_names():
+            sim.set_pose(name, pose7)
+    base = np.asarray(scene_raw[pick], float)
+    others = [np.asarray(p[:2]) for n, p in scene_raw.items() if n != pick]
+    for _ in range(50):
+        r, a = radius * np.sqrt(rng.uniform()), rng.uniform(0, 2 * np.pi)
+        xy = base[:2] + r * np.array([np.cos(a), np.sin(a)])
+        if all(np.linalg.norm(xy - o) > 0.08 for o in others):
+            break
+    yaw = np.radians(rng.uniform(-yaw_deg, yaw_deg))
+    q = _quat_mul_xyzw([0, 0, np.sin(yaw / 2), np.cos(yaw / 2)], base[3:7])
+    sim.set_pose(pick, np.r_[xy, base[2] + 0.005, q])
+    hold = torch.tensor([[*sim.q(), 0.0]], dtype=torch.float32, device=env.unwrapped.device)
+    obs = None
+    for _ in range(settle_steps):
+        obs, *_ = env.step(hold)
+    return obs, float(np.linalg.norm(xy - base[:2])), float(np.degrees(yaw))
 
 
 def calibrate(sim, kin):
@@ -171,6 +225,9 @@ def run_record(args, env, task):
     T_wb = sim.T_world_base()
     T_bw = np.linalg.inv(T_wb)
     expert = make_expert(task, sim, kin, T_bw)
+    # chup canh demo NGAY sau reset (khi thanh cong Arena tu reset va xep lai vat)
+    scene = {n: (T_bw @ sim.obj_T(n)).tolist() for n in expert.object_names}
+    scene_raw = {n: sim.raw_pose(n).tolist() for n in sim.rigid_names()}
     video = VideoWriter(out / f"demo_{task}_expert.mp4", args.ffmpeg)
     ee_traj, grip_traj, q = [], [], sim.q()
     success, step = False, 0
@@ -209,10 +266,10 @@ def run_record(args, env, task):
     video.close()
     ee_traj, grip_traj = np.array(ee_traj), np.array(grip_traj)
     kps = synthesize_hand(ee_traj, grip_traj, rng=args.demo_seed, noise=args.human_noise)
-    scene = {n: (T_bw @ sim.obj_T(n)).tolist() for n in expert.object_names}
     np.savez(out / f"demo_{task}.npz", keypoints=kps, ee_traj=ee_traj, grip=grip_traj, T_world_base=T_wb,
              expert_success=success, human_noise=args.human_noise, demo_seed=args.demo_seed,
-             prompt=env.unwrapped.get_language_instruction(), scene=json.dumps(scene))
+             prompt=env.unwrapped.get_language_instruction(), scene=json.dumps(scene),
+             scene_raw=json.dumps(scene_raw))
     print(f"RESULT record {task}: expert {'THANH CONG' if success else 'THAT BAI'}, {len(ee_traj)} buoc "
           f"({len(ee_traj) / CONTROL_HZ:.1f} s), tay nguoi '{args.human_noise}' -> {out / f'demo_{task}.npz'}", flush=True)
 
@@ -257,11 +314,14 @@ def run_eval(args, env, task):
             seed = args.first_seed + ep
             obs, _ = env.reset(seed=seed)
             sim = SimHandle(env)
+            pick = TASKS[task]["pick"]
+            if "scene_raw" in demo.files and args.var_radius >= 0:  # canh test = canh demo + xe dich vat can gap
+                obs, d_xy, d_yaw = set_test_scene(env, sim, json.loads(str(demo["scene_raw"])), pick,
+                                                  seed=1000 + ep, radius=args.var_radius, yaw_deg=args.var_yaw)
             kin = FrankaKinematics()
             calibrate(sim, kin)
             q_rest = TASKS[task].get("q_rest", sim.q())
             q_ret, g_ret, _, ik_err = retarget_to_joints(kps, kin, sim.q(), q_rest)
-            pick = TASKS[task]["pick"]
             p_obj = (np.linalg.inv(sim.T_world_base()) @ sim.obj_T(pick))[:3, 3]
             p_demo = np.array(json.loads(str(demo["scene"]))[pick])[:3, 3]
             print(f"EP {method} ep{ep}: {pick} tai {p_obj.round(3)} (lech so voi canh demo "
@@ -329,7 +389,14 @@ def main():
         builder = get_arena_builder_from_cli(args, hydra_overrides=hydra)
         env = builder.make_registered()
         t0 = time.time()
-        (run_record if args.mode == "record" else run_eval)(args, env, args.task)
+        try:
+            (run_record if args.mode == "record" else run_eval)(args, env, args.task)
+        except BaseException:  # in day du (Arena thoat bang os._exit, de mat thong bao)
+            import traceback
+
+            traceback.print_exc()
+            sys.stdout.flush()
+            raise
         print(f"Thoi gian chay {time.time() - t0:.0f} s", flush=True)
         env.close()
 
